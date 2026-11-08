@@ -22,6 +22,9 @@ public:
 
     QSize sizeHint() const override;
     void setMinutes(int minutes);
+    void refreshWorld();
+    void addBloodAt(int row, int col);
+    void clearBlood();
     bool isNight() const;
 
 protected:
@@ -36,6 +39,12 @@ private:
         qreal y;
         qreal speed;
         qreal length;
+    };
+
+    struct BloodStain {
+        int row;
+        int col;
+        quint32 seed;
     };
 
     void buildMapCache();
@@ -61,6 +70,7 @@ private:
     QPixmap scene_;
     QPixmap vignette_;
     QVector<Drop> drops_;
+    QVector<BloodStain> bloodStains_;
     QTimer* rainTimer_;
     QPoint mousePos_;
     int hoverRow_;

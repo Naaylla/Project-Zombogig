@@ -11,27 +11,23 @@ struct Stats {
 
 Stats statsFor(ZombieType type) {
     switch (type) {
-    case ZombieType::Walker:
-        return {10, 3, 1, 2};
+    case ZombieType::Tank:
+        return {24, 7, 4, 1};
     case ZombieType::Runner:
         return {7, 2, 0, 5};
-    case ZombieType::Brute:
-        return {24, 7, 4, 1};
-    case ZombieType::Crawler:
-        return {5, 2, 0, 1};
+    case ZombieType::Exploder:
+        return {12, 5, 1, 2};
     }
     return {8, 2, 1, 2};
 }
 
 QColor colorFor(ZombieType type) {
     switch (type) {
-    case ZombieType::Walker:
-        return QColor(86, 102, 76);
+    case ZombieType::Tank:
+        return QColor(66, 78, 62);
     case ZombieType::Runner:
         return QColor(110, 116, 88);
-    case ZombieType::Brute:
-        return QColor(66, 78, 62);
-    case ZombieType::Crawler:
+    case ZombieType::Exploder:
         return QColor(92, 104, 74);
     }
     return QColor(90, 100, 78);
@@ -39,14 +35,12 @@ QColor colorFor(ZombieType type) {
 
 QString nameFor(ZombieType type) {
     switch (type) {
-    case ZombieType::Walker:
-        return QStringLiteral("Walker Zombie");
+    case ZombieType::Tank:
+        return QStringLiteral("Tank Zombie");
     case ZombieType::Runner:
         return QStringLiteral("Runner Zombie");
-    case ZombieType::Brute:
-        return QStringLiteral("Brute Zombie");
-    case ZombieType::Crawler:
-        return QStringLiteral("Crawler Zombie");
+    case ZombieType::Exploder:
+        return QStringLiteral("Exploder Zombie");
     }
     return QStringLiteral("Zombie");
 }

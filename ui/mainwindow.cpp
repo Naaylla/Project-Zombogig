@@ -2,15 +2,23 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <vector>
 
 #include <QColor>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLinearGradient>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QPoint>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QResizeEvent>
 #include <QScreen>
+#include <QSpinBox>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -19,20 +27,112 @@
 #include "entities/zombie.h"
 #include "mapview.h"
 #include "prop.h"
-#include "soundmanager.h"
+
+namespace {
+
+void drawSplat(QPainter& painter, qreal cx, qreal cy, qreal radius,
+               quint32 seed) {
+    QRandomGenerator rng(seed);
+    painter.setPen(Qt::NoPen);
+
+    for (int i = 0; i < 7; ++i) {
+        const qreal ox = (rng.generateDouble() * 2.0 - 1.0) * radius;
+        const qreal oy = (rng.generateDouble() * 2.0 - 1.0) * radius * 0.5;
+        const qreal size = radius * (0.08 + rng.generateDouble() * 0.16);
+        painter.setBrush(QColor(92, 20, 17, 90 + rng.bounded(60)));
+        painter.drawEllipse(QPointF(cx + ox, cy + oy), size, size * 0.7);
+    }
+
+    painter.setBrush(QColor(82, 18, 15, 150));
+    for (int i = 0; i < 3; ++i) {
+        const qreal dx = (rng.generateDouble() * 2.0 - 1.0) * radius * 0.5;
+        const qreal width = 2.0 + rng.generateDouble() * 3.0;
+        const qreal length = radius * (0.6 + rng.generateDouble() * 1.2);
+        painter.drawRoundedRect(QRectF(cx + dx, cy, width, length),
+                                width / 2.0, width / 2.0);
+        painter.drawEllipse(QPointF(cx + dx + width / 2.0, cy + length),
+                            width * 0.6, width * 0.5);
+    }
+}
+
+void paintGrime(QPainter& painter, const QRect& rect, quint32 seed,
+                bool topBar) {
+    QRandomGenerator rng(seed);
+    painter.setPen(Qt::NoPen);
+
+    for (int i = 0; i < rect.width() / 5; ++i) {
+        const int x = rect.left() + rng.bounded(rect.width());
+        const int y = rect.top() + rng.bounded(rect.height());
+        painter.setBrush(QColor(0, 0, 0, rng.bounded(4, 16)));
+        painter.drawRect(x, y, rng.bounded(1, 4), 1);
+    }
+
+    painter.setPen(QPen(QColor(60, 64, 58, 40), 1));
+    for (int i = 0; i < 6; ++i) {
+        const int x = rect.left() + rng.bounded(rect.width());
+        const int y = rect.top() + rng.bounded(rect.height());
+        painter.drawLine(x, y, x + rng.bounded(10, 40), y + rng.bounded(-2, 3));
+    }
+    painter.setPen(Qt::NoPen);
+
+    const int splats = topBar ? 2 : 3;
+    const qreal topPositions[] = {0.03, 0.93};
+    const qreal bottomPositions[] = {0.02, 0.36, 0.93};
+    const qreal* positions = topBar ? topPositions : bottomPositions;
+    for (int i = 0; i < splats; ++i) {
+        const qreal cx = rect.left() + rect.width() * positions[i];
+        const qreal cy = rect.top() + rect.height() * (i == 0 ? 0.55 : 0.32);
+        drawSplat(painter, cx, cy, rect.height() * 0.5,
+                  seed + static_cast<quint32>(i) * 17u);
+    }
+}
+
+class HudBar : public QWidget {
+public:
+    explicit HudBar(bool top, QWidget* parent = nullptr)
+        : QWidget(parent), top_(top) {
+        setAttribute(Qt::WA_StyledBackground, false);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        QLinearGradient bg(0, 0, 0, height());
+        bg.setColorAt(0.0, top_ ? QColor(12, 15, 14) : QColor(9, 11, 10));
+        bg.setColorAt(1.0, top_ ? QColor(7, 9, 9) : QColor(6, 8, 7));
+        painter.fillRect(rect(), bg);
+
+        painter.setPen(QPen(QColor(28, 33, 32), 1));
+        if (top_) {
+            painter.drawLine(0, height() - 1, width(), height() - 1);
+        } else {
+            painter.drawLine(0, 0, width(), 0);
+        }
+
+        paintGrime(painter, rect(), top_ ? 0xB100D1u : 0xB100D2u, top_);
+    }
+
+private:
+    bool top_;
+};
+
+}  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       grid_(12, 12),
       map_(nullptr),
       clock_(nullptr),
-      sound_(nullptr),
       topBar_(nullptr),
       bottomBar_(nullptr),
       statsHost_(nullptr),
+      spawnPanel_(nullptr),
       topLayout_(nullptr),
       bottomLayout_(nullptr),
       statsLayout_(nullptr),
+      spawnLayout_(nullptr),
       titleLabel_(nullptr),
       subtitleLabel_(nullptr),
       timeLabel_(nullptr),
@@ -43,7 +143,10 @@ MainWindow::MainWindow(QWidget* parent)
       foodValue_(nullptr),
       hintLabel_(nullptr),
       skipButton_(nullptr),
-      soundButton_(nullptr),
+      applyButton_(nullptr),
+      zombieSpin_(nullptr),
+      humanSpin_(nullptr),
+      treeSpin_(nullptr),
       uiScale_(0.0),
       totalMinutes_(20 * 60) {
     populateWorld();
@@ -53,9 +156,8 @@ MainWindow::MainWindow(QWidget* parent)
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    topBar_ = new QWidget(central);
+    topBar_ = new HudBar(true, central);
     topBar_->setObjectName(QStringLiteral("topBar"));
-    topBar_->setAttribute(Qt::WA_StyledBackground, true);
 
     topLayout_ = new QHBoxLayout(topBar_);
 
@@ -97,9 +199,8 @@ MainWindow::MainWindow(QWidget* parent)
     map_->setMinutes(totalMinutes_);
     root->addWidget(map_, 1);
 
-    bottomBar_ = new QWidget(central);
+    bottomBar_ = new HudBar(false, central);
     bottomBar_->setObjectName(QStringLiteral("bottomBar"));
-    bottomBar_->setAttribute(Qt::WA_StyledBackground, true);
 
     bottomLayout_ = new QHBoxLayout(bottomBar_);
 
@@ -137,11 +238,50 @@ MainWindow::MainWindow(QWidget* parent)
     hintLabel_->setObjectName(QStringLiteral("hint"));
     bottomLayout_->addWidget(hintLabel_, 0, Qt::AlignVCenter);
 
-    soundButton_ = new QPushButton(bottomBar_);
-    soundButton_->setObjectName(QStringLiteral("soundButton"));
-    soundButton_->setCursor(Qt::PointingHandCursor);
-    connect(soundButton_, &QPushButton::clicked, this, &MainWindow::toggleSound);
-    bottomLayout_->addWidget(soundButton_, 0, Qt::AlignVCenter);
+    spawnPanel_ = new QWidget(bottomBar_);
+    spawnLayout_ = new QHBoxLayout(spawnPanel_);
+    spawnLayout_->setContentsMargins(0, 0, 0, 0);
+
+    auto addParam = [this](const QString& name, int value, int max)
+        -> QSpinBox* {
+        auto* block = new QWidget(spawnPanel_);
+        auto* layout = new QVBoxLayout(block);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+
+        auto* label = new QLabel(name, block);
+        label->setObjectName(QStringLiteral("spawnLabel"));
+        auto* spin = new QSpinBox(block);
+        spin->setObjectName(QStringLiteral("spawnSpin"));
+        spin->setRange(0, max);
+        spin->setValue(value);
+        spin->setAlignment(Qt::AlignCenter);
+        spin->setAccelerated(true);
+        spin->setButtonSymbols(QAbstractSpinBox::PlusMinus);
+        QPalette spinPalette = spin->palette();
+        spinPalette.setColor(QPalette::Button, QColor(0x1a, 0x20, 0x21));
+        spinPalette.setColor(QPalette::ButtonText, QColor(0xc2, 0xc8, 0xb6));
+        spinPalette.setColor(QPalette::Base, QColor(0x10, 0x13, 0x14));
+        spinPalette.setColor(QPalette::Text, QColor(0xd8, 0xd1, 0xbf));
+        spin->setPalette(spinPalette);
+        layout->addWidget(label);
+        layout->addWidget(spin);
+        spawnLayout_->addWidget(block);
+        return spin;
+    };
+
+    zombieSpin_ = addParam(QStringLiteral("ZOMBIES"), 8, 40);
+    humanSpin_ = addParam(QStringLiteral("HUMANS"), 5, 30);
+    treeSpin_ = addParam(QStringLiteral("TREES"), 2, 40);
+
+    applyButton_ = new QPushButton(QStringLiteral("APPLY"), spawnPanel_);
+    applyButton_->setObjectName(QStringLiteral("applyButton"));
+    applyButton_->setCursor(Qt::PointingHandCursor);
+    connect(applyButton_, &QPushButton::clicked, this,
+            &MainWindow::applySpawnSettings);
+    spawnLayout_->addWidget(applyButton_, 0, Qt::AlignBottom);
+
+    bottomLayout_->addWidget(spawnPanel_, 0, Qt::AlignVCenter);
 
     skipButton_ = new QPushButton(QStringLiteral("SKIP TURN  +1 HOUR"), bottomBar_);
     skipButton_->setObjectName(QStringLiteral("skipButton"));
@@ -151,11 +291,6 @@ MainWindow::MainWindow(QWidget* parent)
 
     root->addWidget(bottomBar_);
     setCentralWidget(central);
-
-    sound_ = new SoundManager(this);
-    soundButton_->setText(sound_->available() ? QStringLiteral("SOUND ON")
-                                              : QStringLiteral("SOUND N/A"));
-    soundButton_->setEnabled(sound_->available());
 
     setWindowTitle(QStringLiteral("ZomboGIG - Survival Isometric"));
     setMinimumSize(1120, 720);
@@ -201,18 +336,25 @@ void MainWindow::applyUiScale() {
     bottomLayout_->setContentsMargins(px(30), px(14), px(28), px(14));
     bottomLayout_->setSpacing(px(26));
     statsLayout_->setSpacing(px(38));
+    spawnLayout_->setContentsMargins(0, 0, 0, 0);
+    spawnLayout_->setSpacing(px(10));
 
-    soundButton_->setFixedHeight(px(42));
-    soundButton_->setMinimumWidth(px(126));
     skipButton_->setFixedHeight(px(46));
     skipButton_->setMinimumWidth(px(224));
 
+    zombieSpin_->setFixedHeight(px(32));
+    humanSpin_->setFixedHeight(px(32));
+    treeSpin_->setFixedHeight(px(32));
+    zombieSpin_->setFixedWidth(px(72));
+    humanSpin_->setFixedWidth(px(72));
+    treeSpin_->setFixedWidth(px(72));
+    applyButton_->setFixedHeight(px(34));
+    applyButton_->setMinimumWidth(px(64));
+
+    spawnPanel_->setVisible(width() >= px(1320));
+
     QString style;
     style += QStringLiteral(
-        "QWidget#topBar { background-color: #0a0d0e;"
-        " border-bottom: 1px solid #1b2021; }"
-        "QWidget#bottomBar { background-color: #0a0d0e;"
-        " border-top: 1px solid #1b2021; }"
         "QLabel { color: #b8b2a0; background: transparent; }");
 
     style += QStringLiteral(
@@ -258,18 +400,30 @@ void MainWindow::applyUiScale() {
                  .arg(px(13))
                  .arg(px(2));
     style += QStringLiteral(
-                 "QPushButton#soundButton { background-color: #101314;"
-                 " color: #9aa08f; border: 1px solid #2c3230;"
-                 " padding: %1px %2px; font-size: %3px; font-weight: bold;"
+                 "QLabel#spawnLabel { color: #8a8474; font-size: %1px;"
+                 " letter-spacing: %2px; }")
+                 .arg(px(10))
+                 .arg(px(1));
+    style += QStringLiteral(
+                 "QSpinBox#spawnSpin { background-color: #101314;"
+                 " color: #d8d1bf; border: 1px solid #2c3230;"
+                 " padding: %1px %2px; font-size: %3px; font-weight: bold; }"
+                 "QSpinBox#spawnSpin:focus { border-color: #5a2a26; }")
+                 .arg(px(2))
+                 .arg(px(4))
+                 .arg(px(13));
+    style += QStringLiteral(
+                 "QPushButton#applyButton { background-color: #141718;"
+                 " color: #b8b2a0; border: 1px solid #2c3230;"
+                 " padding: %1px %2px; font-weight: bold; font-size: %3px;"
                  " letter-spacing: %4px; }"
-                 "QPushButton#soundButton:hover { border-color: #4a534f;"
-                 " color: #c2c8b6; }"
-                 "QPushButton#soundButton:disabled { color: #4f544c;"
-                 " border-color: #1d2120; }")
+                 "QPushButton#applyButton:hover { background-color: #1c2021;"
+                 " border-color: #4a534f; color: #d8d1bf; }"
+                 "QPushButton#applyButton:pressed { background-color: #2a1412; }")
                  .arg(px(6))
-                 .arg(px(14))
-                 .arg(px(11))
-                 .arg(px(2));
+                 .arg(px(10))
+                 .arg(px(10))
+                 .arg(px(1));
 
     setStyleSheet(style);
 }
@@ -290,13 +444,70 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     QMainWindow::keyPressEvent(event);
 }
 
-void MainWindow::populateWorld() {
+void MainWindow::clearWorld() {
+    for (int row = 0; row < grid_.rows(); ++row) {
+        for (int col = 0; col < grid_.cols(); ++col) {
+            Cell* cell = grid_.at(row, col);
+            cell->setProp(nullptr);
+            cell->setEntity(nullptr);
+        }
+    }
+}
+
+void MainWindow::growPlants() {
+    for (int row = 0; row < grid_.rows(); ++row) {
+        for (int col = 0; col < grid_.cols(); ++col) {
+            Prop* prop = grid_.at(row, col)->prop();
+            if (prop) {
+                prop->grow();
+            }
+        }
+    }
+}
+
+void MainWindow::resolveAttacks() {
+    const int offsets[8][2] = {{-1, -1}, {-1, 0}, {-1, 1}, {0, -1},
+                               {0, 1},   {1, -1}, {1, 0},  {1, 1}};
+
+    for (int row = 0; row < grid_.rows(); ++row) {
+        for (int col = 0; col < grid_.cols(); ++col) {
+            const Entity* zombie = grid_.at(row, col)->entity();
+            if (!zombie || zombie->faction() != Faction::Zombie) {
+                continue;
+            }
+
+            for (const auto& offset : offsets) {
+                const int targetRow = row + offset[0];
+                const int targetCol = col + offset[1];
+                if (targetRow < 0 || targetCol < 0 ||
+                    targetRow >= grid_.rows() || targetCol >= grid_.cols()) {
+                    continue;
+                }
+
+                const Entity* human =
+                    grid_.at(targetRow, targetCol)->entity();
+                if (human && human->faction() == Faction::Human) {
+                    map_->addBloodAt(targetRow, targetCol);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void MainWindow::populateWorld(int zombies, int humans, int trees) {
+    clearWorld();
+
+    const int requestedZombies = std::max(0, zombies);
+    const int requestedHumans = std::max(0, humans);
+    const int requestedTrees = std::max(0, trees);
+
     auto placeProp = [this](int row, int col, PropKind kind) {
         if (row < 0 || col < 0 || row >= grid_.rows() || col >= grid_.cols()) {
             return;
         }
         Cell* cell = grid_.at(row, col);
-        if (cell->prop() || cell->entity()) {
+        if (!cell->walkable() || cell->prop() || cell->entity()) {
             return;
         }
         cell->setProp(new Prop(kind));
@@ -307,7 +518,7 @@ void MainWindow::populateWorld() {
             return;
         }
         Cell* cell = grid_.at(row, col);
-        if (cell->prop() || cell->entity()) {
+        if (!cell->walkable() || cell->prop() || cell->entity()) {
             return;
         }
         cell->setEntity(new Human(type));
@@ -318,7 +529,7 @@ void MainWindow::populateWorld() {
             return;
         }
         Cell* cell = grid_.at(row, col);
-        if (cell->prop() || cell->entity()) {
+        if (!cell->walkable() || cell->prop() || cell->entity()) {
             return;
         }
         cell->setEntity(new Zombie(type));
@@ -340,18 +551,16 @@ void MainWindow::populateWorld() {
         PropKind kind;
     };
     const PropSpec props[] = {
-        {2, 9, PropKind::Crate},
-        {3, 9, PropKind::Barrel},
-        {9, 2, PropKind::Rock},
-        {2, 2, PropKind::Tree},
-        {9, 9, PropKind::Tree},
         {1, 5, PropKind::Bush},
         {10, 6, PropKind::Bush},
-        {8, 2, PropKind::Rock},
         {5, 10, PropKind::Bush},
         {6, 10, PropKind::Bush},
-        {10, 9, PropKind::Corpse},
-        {1, 9, PropKind::Bush}};
+        {1, 9, PropKind::Bush},
+        {9, 3, PropKind::Plant},
+        {9, 4, PropKind::Plant},
+        {10, 3, PropKind::Plant},
+        {10, 4, PropKind::Plant},
+        {8, 3, PropKind::Plant}};
     for (const PropSpec& prop : props) {
         placeProp(prop.row, prop.col, prop.kind);
     }
@@ -363,14 +572,16 @@ void MainWindow::populateWorld() {
         int col;
         HumanType type;
     };
-    const HumanSpec humans[] = {
-        {5, 5, HumanType::Soldier},
-        {5, 6, HumanType::Engineer},
+    const HumanSpec humanSpots[] = {
+        {5, 5, HumanType::Farmer},
+        {5, 6, HumanType::Builder},
         {6, 5, HumanType::Doctor},
-        {6, 6, HumanType::Survivor},
-        {9, 6, HumanType::Survivor}};
-    for (const HumanSpec& human : humans) {
-        placeHuman(human.row, human.col, human.type);
+        {6, 6, HumanType::Military},
+        {9, 6, HumanType::Military}};
+    const int baseHumans =
+        std::min(requestedHumans, static_cast<int>(std::size(humanSpots)));
+    for (int i = 0; i < baseHumans; ++i) {
+        placeHuman(humanSpots[i].row, humanSpots[i].col, humanSpots[i].type);
     }
 
     struct ZombieSpec {
@@ -378,18 +589,87 @@ void MainWindow::populateWorld() {
         int col;
         ZombieType type;
     };
-    const ZombieSpec zombies[] = {
-        {0, 3, ZombieType::Walker},
+    const ZombieSpec zombieSpots[] = {
+        {0, 3, ZombieType::Tank},
         {1, 10, ZombieType::Runner},
-        {9, 5, ZombieType::Brute},
-        {10, 8, ZombieType::Crawler},
-        {3, 1, ZombieType::Walker},
-        {8, 10, ZombieType::Runner},
-        {11, 6, ZombieType::Walker},
-        {6, 0, ZombieType::Runner}};
-    for (const ZombieSpec& zombie : zombies) {
-        placeZombie(zombie.row, zombie.col, zombie.type);
+        {9, 5, ZombieType::Tank},
+        {10, 8, ZombieType::Exploder},
+        {3, 1, ZombieType::Runner},
+        {8, 10, ZombieType::Exploder},
+        {11, 6, ZombieType::Runner},
+        {6, 0, ZombieType::Tank}};
+    const int baseZombies =
+        std::min(requestedZombies, static_cast<int>(std::size(zombieSpots)));
+    for (int i = 0; i < baseZombies; ++i) {
+        placeZombie(zombieSpots[i].row, zombieSpots[i].col,
+                    zombieSpots[i].type);
     }
+
+    const int treeSpots[][2] = {{2, 2}, {9, 9}};
+    const int baseTrees = std::min(requestedTrees, 2);
+    for (int i = 0; i < baseTrees; ++i) {
+        placeProp(treeSpots[i][0], treeSpots[i][1], PropKind::Tree);
+    }
+
+    std::vector<QPoint> freeCells;
+    for (int row = 0; row < grid_.rows(); ++row) {
+        for (int col = 0; col < grid_.cols(); ++col) {
+            const Cell* cell = grid_.at(row, col);
+            if (cell->walkable() && !cell->prop() && !cell->entity()) {
+                freeCells.emplace_back(col, row);
+            }
+        }
+    }
+
+    auto takeFree = [&freeCells]() -> QPoint {
+        if (freeCells.empty()) {
+            return QPoint(-1, -1);
+        }
+        const int index =
+            QRandomGenerator::global()->bounded(
+                static_cast<int>(freeCells.size()));
+        const QPoint spot = freeCells[static_cast<size_t>(index)];
+        freeCells[static_cast<size_t>(index)] = freeCells.back();
+        freeCells.pop_back();
+        return spot;
+    };
+
+    for (int i = baseTrees; i < requestedTrees; ++i) {
+        const QPoint spot = takeFree();
+        if (spot.x() < 0) {
+            break;
+        }
+        placeProp(spot.y(), spot.x(), PropKind::Tree);
+    }
+
+    for (int i = baseHumans; i < requestedHumans; ++i) {
+        const QPoint spot = takeFree();
+        if (spot.x() < 0) {
+            break;
+        }
+        const auto type = static_cast<HumanType>(i % 4);
+        placeHuman(spot.y(), spot.x(), type);
+    }
+
+    for (int i = baseZombies; i < requestedZombies; ++i) {
+        const QPoint spot = takeFree();
+        if (spot.x() < 0) {
+            break;
+        }
+        const auto type = static_cast<ZombieType>(i % 3);
+        placeZombie(spot.y(), spot.x(), type);
+    }
+}
+
+void MainWindow::applySpawnSettings() {
+    if (!zombieSpin_ || !humanSpin_ || !treeSpin_ || !map_) {
+        return;
+    }
+    map_->clearBlood();
+    populateWorld(zombieSpin_->value(), humanSpin_->value(),
+                  treeSpin_->value());
+    map_->refreshWorld();
+    refreshStats();
 }
 
 void MainWindow::refreshStats() {
@@ -424,9 +704,13 @@ void MainWindow::refreshStats() {
 
 void MainWindow::advanceTurn() {
     totalMinutes_ += 60;
+    growPlants();
+    resolveAttacks();
     updateTimeLabels();
+    map_->refreshWorld();
     map_->setMinutes(totalMinutes_);
     clock_->setMinutes(totalMinutes_);
+    refreshStats();
 }
 
 void MainWindow::updateTimeLabels() {
@@ -437,13 +721,4 @@ void MainWindow::updateTimeLabels() {
                             .arg(minutesOfDay / 60, 2, 10, QLatin1Char('0'))
                             .arg(minutesOfDay % 60, 2, 10, QLatin1Char('0')));
     dayLabel_->setText(QStringLiteral("DAY %1").arg(day));
-}
-
-void MainWindow::toggleSound() {
-    if (!sound_ || !sound_->available()) {
-        return;
-    }
-    sound_->setAmbienceEnabled(!sound_->ambienceEnabled());
-    soundButton_->setText(sound_->ambienceEnabled() ? QStringLiteral("SOUND ON")
-                                                    : QStringLiteral("SOUND OFF"));
 }

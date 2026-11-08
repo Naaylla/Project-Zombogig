@@ -101,9 +101,48 @@ void drawBlock(QPainter& painter, int cx, int baseCenterY, const QColor& base,
 
 void drawProp(QPainter& painter, int cx, int topY, const Prop& prop) {
     switch (prop.kind()) {
-    case PropKind::Wall:
-        drawBlock(painter, cx, topY, QColor(92, 88, 82), 56, 28, 62);
+    case PropKind::Wall: {
+        const int wallHeight = 22;
+        const QPoint top(cx, topY - TOP_HALF_HEIGHT);
+        const QPoint left(cx - TOP_HALF_WIDTH, topY);
+        const QPoint right(cx + TOP_HALF_WIDTH, topY);
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(66, 58, 48));
+        painter.drawPolygon(QPolygon()
+                            << left << top
+                            << QPoint(top.x(), top.y() - wallHeight)
+                            << QPoint(left.x(), left.y() - wallHeight));
+        painter.setBrush(QColor(78, 68, 56));
+        painter.drawPolygon(QPolygon()
+                            << top << right
+                            << QPoint(right.x(), right.y() - wallHeight)
+                            << QPoint(top.x(), top.y() - wallHeight));
+
+        painter.setPen(QPen(QColor(46, 40, 33), 2));
+        painter.drawLine(left.x(), left.y() - wallHeight,
+                         top.x(), top.y() - wallHeight);
+        painter.drawLine(top.x(), top.y() - wallHeight,
+                         right.x(), right.y() - wallHeight);
+
+        painter.setPen(QPen(QColor(50, 43, 35, 160), 1));
+        for (int i = 1; i <= 2; ++i) {
+            const int drop = wallHeight * i / 3;
+            painter.drawLine(left.x(), left.y() - drop,
+                             top.x(), top.y() - drop);
+            painter.drawLine(top.x(), top.y() - drop,
+                             right.x(), right.y() - drop);
+        }
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(54, 47, 38));
+        const QPoint posts[] = {left, top, right};
+        for (const QPoint& post : posts) {
+            painter.drawRect(QRectF(post.x() - 2, post.y() - wallHeight,
+                                    4, wallHeight + 3));
+        }
         break;
+    }
     case PropKind::Bush:
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(0, 0, 0, 70));
@@ -132,36 +171,42 @@ void drawProp(QPainter& painter, int cx, int topY, const Prop& prop) {
         painter.setBrush(QColor(48, 62, 46));
         painter.drawEllipse(QPointF(cx, topY - 52), 16, 11);
         break;
-    case PropKind::Crate:
-        drawBlock(painter, cx, topY, QColor(86, 70, 50), 17, 8, 15);
-        break;
-    case PropKind::Barrel:
+    case PropKind::Plant: {
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 0, 0, 70));
-        painter.drawEllipse(QPointF(cx, topY + 2), 11, 4);
-        painter.setBrush(QColor(62, 52, 40));
-        painter.drawRoundedRect(QRectF(cx - 9, topY - 22, 18, 23), 4, 4);
-        painter.setBrush(QColor(78, 66, 50));
-        painter.drawEllipse(QPointF(cx, topY - 22), 9, 3.5);
-        break;
-    case PropKind::Rock: {
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 0, 0, 70));
-        painter.drawEllipse(QPointF(cx, topY + 2), 16, 6);
-        QPolygon rock;
-        rock << QPoint(cx - 15, topY) << QPoint(cx - 9, topY - 13)
-             << QPoint(cx + 3, topY - 16) << QPoint(cx + 15, topY - 6)
-             << QPoint(cx + 11, topY);
-        painter.setBrush(QColor(78, 78, 74));
-        painter.drawPolygon(rock);
+        painter.setBrush(QColor(0, 0, 0, 55));
+        painter.drawEllipse(QPointF(cx, topY + 1), 13, 4);
+
+        painter.setBrush(QColor(56, 46, 34));
+        painter.drawEllipse(QPointF(cx - 9, topY), 8, 3);
+        painter.drawEllipse(QPointF(cx + 9, topY), 8, 3);
+
+        const int leaves = 3 + prop.growth();
+        for (int i = 0; i < leaves; ++i) {
+            const qreal dx = (i - (leaves - 1) / 2.0) * 7.0;
+            const qreal tipX = cx + dx * 1.4;
+            const qreal tipY = topY - 9 - prop.growth() * 3;
+            painter.setPen(QPen(QColor(66, 102, 54), 2));
+            painter.drawLine(QPointF(cx + dx, topY), QPointF(tipX, tipY));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(78, 118, 62));
+            painter.drawEllipse(QPointF(tipX, tipY), 3.5, 2.5);
+        }
+
+        if (prop.growth() >= 2) {
+            painter.setBrush(QColor(176, 74, 52));
+            painter.drawEllipse(QPointF(cx - 5, topY - 14), 2, 2);
+            painter.drawEllipse(QPointF(cx + 6, topY - 16), 2, 2);
+        }
         break;
     }
     case PropKind::Corpse:
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(72, 22, 20, 150));
-        painter.drawEllipse(QPointF(cx, topY - 2), 20, 9);
-        painter.setBrush(QColor(58, 64, 52));
-        painter.drawEllipse(QPointF(cx - 2, topY - 4), 9, 4);
+        painter.setBrush(QColor(0, 0, 0, 70));
+        painter.drawEllipse(QPointF(cx, topY + 2), 19, 7);
+        painter.setBrush(QColor(70, 72, 60));
+        painter.drawEllipse(QPointF(cx - 3, topY - 3), 11, 5);
+        painter.setBrush(QColor(96, 92, 80));
+        painter.drawEllipse(QPointF(cx + 8, topY - 5), 6, 5);
         break;
     case PropKind::Campfire:
         painter.setPen(Qt::NoPen);
@@ -188,19 +233,6 @@ void drawProp(QPainter& painter, int cx, int topY, const Prop& prop) {
         painter.drawEllipse(QPointF(cx + 1, topY - 10), 5, 3);
         break;
     }
-}
-
-bool isBloodCell(int row, int col) {
-    static const int cells[][2] = {
-        {2, 8},  {3, 3},  {9, 4},  {10, 7}, {7, 6},  {2, 4},
-        {10, 2}, {0, 6},  {11, 3}, {5, 9},  {6, 2},  {8, 9},
-        {1, 1},  {4, 10}, {9, 8},  {0, 10}};
-    for (const auto& cell : cells) {
-        if (cell[0] == row && cell[1] == col) {
-            return true;
-        }
-    }
-    return false;
 }
 
 void drawBloodSplat(QPainter& painter, int cx, int groundY, quint32 seed,
@@ -251,25 +283,20 @@ void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
     if (!human) {
         if (const auto* zombie = dynamic_cast<const Zombie*>(&entity)) {
             switch (zombie->type()) {
-            case ZombieType::Walker:
+            case ZombieType::Tank:
+                halfBody = 15;
+                shoulderY = topY - 52;
+                headY = topY - 60;
                 break;
             case ZombieType::Runner:
                 halfBody = 9;
                 lean = true;
                 break;
-            case ZombieType::Brute:
-                halfBody = 15;
-                shoulderY = topY - 52;
-                headY = topY - 60;
+            case ZombieType::Exploder:
+                halfBody = 14;
+                shoulderY = topY - 46;
+                headY = topY - 54;
                 break;
-            case ZombieType::Crawler:
-                painter.setBrush(body.darker(115));
-                painter.drawEllipse(QPointF(cx, topY - 10), 23, 9);
-                painter.setBrush(body.lighter(125));
-                painter.drawEllipse(QPointF(cx + 17, topY - 15), 9, 7.5);
-                painter.setBrush(QColor(178, 46, 34));
-                painter.drawEllipse(QPointF(cx + 19, topY - 16.5), 1.8, 1.8);
-                return;
             }
         }
     }
@@ -301,9 +328,49 @@ void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
         painter.setBrush(QColor(178, 46, 34));
         painter.drawEllipse(QPointF(headX - 2.8, headY - 0.5), 1.8, 1.8);
         painter.drawEllipse(QPointF(headX + 2.8, headY - 0.5), 1.8, 1.8);
+
+        QRandomGenerator rng(static_cast<quint32>(cx * 73 + topY * 131 + 911));
+        painter.setPen(Qt::NoPen);
+        for (int i = 0; i < 4; ++i) {
+            const qreal bx = cx + rng.bounded(-halfBody + 3, halfBody - 2);
+            const qreal by = rng.bounded(shoulderY + 5, waistY - 1);
+            const qreal radius = rng.bounded(2, 5);
+            painter.setBrush(QColor(112, 26, 22, 175));
+            painter.drawEllipse(QPointF(bx, by), radius, radius * 0.7);
+        }
+
+        painter.setBrush(body.darker(160));
+        painter.drawPolygon(QPolygon()
+                            << QPoint(cx - halfBody, waistY)
+                            << QPoint(cx - halfBody + 5, waistY - 9)
+                            << QPoint(cx - halfBody + 10, waistY)
+                            << QPoint(cx, waistY - 6)
+                            << QPoint(cx + halfBody - 4, waistY));
+
+        painter.setPen(QPen(QColor(178, 168, 138, 190), 1));
+        painter.drawLine(cx - halfBody + 3, shoulderY + 10,
+                         cx + halfBody - 4, shoulderY + 13);
+        painter.drawLine(cx - halfBody + 4, shoulderY + 15,
+                         cx + halfBody - 6, shoulderY + 18);
+
+        painter.setPen(QPen(QColor(126, 28, 22, 220), 2));
+        painter.drawLine(QPointF(headX, headY + 5),
+                         QPointF(headX - 1, headY + 11));
+        painter.setPen(Qt::NoPen);
+
+        if (const auto* zombie = dynamic_cast<const Zombie*>(&entity)) {
+            if (zombie->type() == ZombieType::Exploder) {
+                for (int i = 0; i < 5; ++i) {
+                    const qreal bx = cx + rng.bounded(-halfBody + 3, halfBody - 2);
+                    const qreal by = rng.bounded(shoulderY + 8, waistY - 2);
+                    painter.setBrush(QColor(150, 58, 38, 200));
+                    painter.drawEllipse(QPointF(bx, by), 3, 3);
+                }
+            }
+        }
     } else if (const auto* h = dynamic_cast<const Human*>(&entity)) {
         switch (h->type()) {
-        case HumanType::Soldier:
+        case HumanType::Military:
             painter.setBrush(QColor(58, 64, 52));
             painter.drawEllipse(QPointF(headX, headY - 3), 9, 5);
             break;
@@ -312,11 +379,15 @@ void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
             painter.drawRect(QRectF(cx - 2, shoulderY + 7, 4, 10));
             painter.drawRect(QRectF(cx - 5, shoulderY + 10, 10, 4));
             break;
-        case HumanType::Engineer:
-            painter.setBrush(QColor(176, 138, 62));
-            painter.drawRect(QRectF(cx - halfBody, waistY - 10, halfBody * 2, 6));
+        case HumanType::Builder:
+            painter.setBrush(QColor(196, 158, 58));
+            painter.drawEllipse(QPointF(headX, headY - 4), 10, 4);
+            painter.drawRect(QRectF(headX - 6, headY - 9, 12, 5));
             break;
-        case HumanType::Survivor:
+        case HumanType::Farmer:
+            painter.setBrush(QColor(178, 158, 96));
+            painter.drawEllipse(QPointF(headX, headY - 4), 13, 4);
+            painter.drawEllipse(QPointF(headX, headY - 7), 6, 4);
             break;
         }
     }
@@ -333,6 +404,7 @@ MapView::MapView(Grid& grid, QWidget* parent)
       minutes_(20 * 60),
       mapScale_(1.0) {
     setMouseTracking(true);
+    setAttribute(Qt::WA_OpaquePaintEvent, true);
 
     buildMapCache();
     initRain();
@@ -340,7 +412,7 @@ MapView::MapView(Grid& grid, QWidget* parent)
     rebuildScene();
 
     rainTimer_ = new QTimer(this);
-    rainTimer_->setInterval(33);
+    rainTimer_->setInterval(40);
     connect(rainTimer_, &QTimer::timeout, this, &MapView::stepRain);
     rainTimer_->start();
 }
@@ -353,6 +425,35 @@ void MapView::setMinutes(int minutes) {
     minutes_ = minutes;
     rebuildScene();
     update();
+}
+
+void MapView::refreshWorld() {
+    hoverRow_ = -1;
+    hoverCol_ = -1;
+    buildMapCache();
+    rebuildScene();
+    update();
+}
+
+void MapView::addBloodAt(int row, int col) {
+    if (row < 0 || col < 0 || row >= grid_.rows() || col >= grid_.cols()) {
+        return;
+    }
+    for (const BloodStain& stain : bloodStains_) {
+        if (stain.row == row && stain.col == col) {
+            return;
+        }
+    }
+    BloodStain stain;
+    stain.row = row;
+    stain.col = col;
+    stain.seed = static_cast<quint32>(row * 131 + col * 977 +
+                                      bloodStains_.size() * 37 + 17);
+    bloodStains_.push_back(stain);
+}
+
+void MapView::clearBlood() {
+    bloodStains_.clear();
 }
 
 qreal MapView::daylight() const {
@@ -407,12 +508,10 @@ void MapView::buildMapCache() {
             drawBlock(painter, cx, cy, base);
 
             const int topY = cy - TILE_THICKNESS;
-            const bool corpse =
-                cell->prop() && cell->prop()->kind() == PropKind::Corpse;
-            if (corpse || isBloodCell(row, col)) {
-                const quint32 seed =
-                    static_cast<quint32>(row * 131 + col * 977 + 17);
-                drawBloodSplat(painter, cx, topY, seed, corpse);
+            for (const BloodStain& stain : bloodStains_) {
+                if (stain.row == row && stain.col == col) {
+                    drawBloodSplat(painter, cx, topY, stain.seed, false);
+                }
             }
             if (cell->prop()) {
                 drawProp(painter, cx, topY, *cell->prop());
@@ -463,24 +562,40 @@ void MapView::drawBackground(QPainter& painter) {
     QRandomGenerator rng(0x5EED1234u);
     painter.setPen(Qt::NoPen);
 
-    const qreal cloudFactor = 0.4 + 0.6 * day;
+    const qreal cloudFactor = 0.7 + 0.3 * day;
     for (int i = 0; i < 32; ++i) {
         const int cx = rng.bounded(-width() / 4, width() + width() / 4);
-        const int cy = rng.bounded(height() / 14, height() * 3 / 4);
-        const int radius = rng.bounded(height() / 10, height() / 3);
-        const int alpha = static_cast<int>(rng.bounded(12, 34) * cloudFactor);
+        const int cy = rng.bounded(height() / 16, height() * 4 / 5);
+        const int radius =
+            rng.bounded(height() / 8, static_cast<int>(height() / 2.4));
+        const int alpha = static_cast<int>(rng.bounded(18, 44) * cloudFactor);
 
         QRadialGradient cloud(QPointF(cx, cy), radius);
-        cloud.setColorAt(0.0, QColor(128, 136, 133, alpha));
-        cloud.setColorAt(0.55, QColor(96, 104, 101, alpha / 2));
-        cloud.setColorAt(1.0, QColor(70, 76, 74, 0));
+        cloud.setColorAt(0.0, QColor(126, 136, 138, alpha));
+        cloud.setColorAt(0.5, QColor(86, 98, 102, alpha / 2));
+        cloud.setColorAt(1.0, QColor(52, 60, 64, 0));
 
         painter.setBrush(cloud);
-        painter.drawEllipse(QPointF(cx, cy), radius, radius * 0.55);
+        painter.drawEllipse(QPointF(cx, cy), radius, radius * 0.5);
+        painter.drawEllipse(
+            QPointF(cx - radius * 0.45, cy + radius * 0.1),
+            radius * 0.62, radius * 0.32);
+        painter.drawEllipse(
+            QPointF(cx + radius * 0.5, cy + radius * 0.06),
+            radius * 0.55, radius * 0.28);
+        painter.drawEllipse(
+            QPointF(cx + radius * 0.1, cy - radius * 0.22),
+            radius * 0.55, radius * 0.3);
     }
 
-    const int fogAlpha = static_cast<int>(18 + 22 * day);
-    QLinearGradient fog(0, height() * 0.5, 0, height());
+    const int stormAlpha = static_cast<int>(70 + 35 * (1.0 - day));
+    QLinearGradient storm(0, 0, 0, height() * 0.55);
+    storm.setColorAt(0.0, QColor(8, 12, 15, stormAlpha));
+    storm.setColorAt(1.0, QColor(8, 12, 15, 0));
+    painter.fillRect(QRect(0, 0, width(), qRound(height() * 0.55)), storm);
+
+    const int fogAlpha = static_cast<int>(34 + 26 * day);
+    QLinearGradient fog(0, height() * 0.45, 0, height());
     fog.setColorAt(0.0, QColor(100, 110, 105, 0));
     fog.setColorAt(1.0, QColor(100, 110, 105, fogAlpha));
     painter.fillRect(rect(), fog);
@@ -679,7 +794,7 @@ void MapView::initRain() {
     }
 
     QRandomGenerator rng(0x4A1F9Cu);
-    const int count = std::max(40, (width() * height()) / 22000);
+    const int count = std::max(36, (width() * height()) / 28000);
     drops_.reserve(count);
 
     for (int i = 0; i < count; ++i) {
@@ -697,14 +812,15 @@ void MapView::stepRain() {
         return;
     }
 
-    const qreal dt = 0.033;
+    QRandomGenerator& rng = *QRandomGenerator::global();
+    const qreal dt = 0.04;
     for (Drop& drop : drops_) {
         drop.y += drop.speed * dt;
         drop.x += drop.speed * dt * 0.16;
 
         if (drop.y > height() + 24 || drop.x > width() + 40) {
-            drop.y = -20.0 - QRandomGenerator::global()->bounded(80);
-            drop.x = QRandomGenerator::global()->bounded(width() + 80) - 40.0;
+            drop.y = -20.0 - rng.bounded(80);
+            drop.x = rng.bounded(width() + 80) - 40.0;
         }
     }
 
@@ -717,14 +833,27 @@ void MapView::drawRain(QPainter& painter) {
     }
 
     painter.setRenderHint(QPainter::Antialiasing, false);
+    QVector<QLineF> normal;
+    QVector<QLineF> bright;
+    normal.reserve(drops_.size());
+    bright.reserve(drops_.size() / 8 + 1);
+
     for (int i = 0; i < drops_.size(); ++i) {
         const Drop& drop = drops_[i];
-        const int alpha = (i % 9 == 0) ? 105 : 58;
-        painter.setPen(QPen(QColor(158, 178, 186, alpha), 1));
-        painter.drawLine(QPointF(drop.x, drop.y),
-                         QPointF(drop.x - drop.length * 0.18,
-                                 drop.y + drop.length));
+        const QLineF line(QPointF(drop.x, drop.y),
+                          QPointF(drop.x - drop.length * 0.18,
+                                  drop.y + drop.length));
+        if (i % 9 == 0) {
+            bright.push_back(line);
+        } else {
+            normal.push_back(line);
+        }
     }
+
+    painter.setPen(QPen(QColor(158, 178, 186, 52), 1));
+    painter.drawLines(normal);
+    painter.setPen(QPen(QColor(170, 190, 198, 100), 1));
+    painter.drawLines(bright);
 }
 
 void MapView::drawTooltip(QPainter& painter) {
@@ -744,6 +873,12 @@ void MapView::drawTooltip(QPainter& painter) {
               << QStringLiteral("SPEED   %1").arg(entity->speed());
     } else if (const Prop* prop = cell->prop()) {
         title = prop->name();
+        if (prop->kind() == PropKind::Plant) {
+            lines << QStringLiteral("GROWTH  %1/3").arg(prop->growth())
+                  << QStringLiteral("FOOD    %1").arg(prop->food());
+        } else if (prop->food() > 0) {
+            lines << QStringLiteral("FOOD    %1").arg(prop->food());
+        }
     } else {
         title = QStringLiteral("Empty Ground");
         lines << QStringLiteral("Nothing here");

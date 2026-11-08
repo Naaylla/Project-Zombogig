@@ -3,10 +3,10 @@
 #include "entities/entity.h"
 
 enum class HumanType {
-    Survivor,
-    Soldier,
+    Farmer,
     Doctor,
-    Engineer
+    Military,
+    Builder
 };
 
 class Human : public Entity {

@@ -17,12 +17,8 @@ Stats statsFor(PropKind kind) {
         return {5, 0, 4, 12};
     case PropKind::Tree:
         return {12, 0, 1, 54};
-    case PropKind::Crate:
-        return {8, 1, 2, 16};
-    case PropKind::Barrel:
-        return {6, 1, 1, 18};
-    case PropKind::Rock:
-        return {20, 2, 0, 12};
+    case PropKind::Plant:
+        return {4, 0, 1, 8};
     case PropKind::Corpse:
         return {0, 0, 0, 2};
     case PropKind::Campfire:
@@ -39,12 +35,8 @@ QString nameFor(PropKind kind) {
         return QStringLiteral("Berry Bush");
     case PropKind::Tree:
         return QStringLiteral("Dead Tree");
-    case PropKind::Crate:
-        return QStringLiteral("Supply Crate");
-    case PropKind::Barrel:
-        return QStringLiteral("Rain Barrel");
-    case PropKind::Rock:
-        return QStringLiteral("Rubble");
+    case PropKind::Plant:
+        return QStringLiteral("Food Plant");
     case PropKind::Corpse:
         return QStringLiteral("Corpse");
     case PropKind::Campfire:
@@ -56,7 +48,7 @@ QString nameFor(PropKind kind) {
 }  // namespace
 
 Prop::Prop(PropKind kind)
-    : kind_(kind) {}
+    : kind_(kind), growth_(0) {}
 
 QString Prop::name() const {
     return nameFor(kind_);
@@ -71,9 +63,22 @@ int Prop::defense() const {
 }
 
 int Prop::food() const {
+    if (kind_ == PropKind::Plant) {
+        return statsFor(kind_).food + growth_;
+    }
     return statsFor(kind_).food;
 }
 
 int Prop::height() const {
     return statsFor(kind_).height;
+}
+
+bool Prop::isFullyGrown() const {
+    return kind_ != PropKind::Plant || growth_ >= 3;
+}
+
+void Prop::grow() {
+    if (kind_ == PropKind::Plant && growth_ < 3) {
+        ++growth_;
+    }
 }

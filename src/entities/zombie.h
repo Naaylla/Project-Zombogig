@@ -3,10 +3,9 @@
 #include "entities/entity.h"
 
 enum class ZombieType {
-    Walker,
+    Tank,
     Runner,
-    Brute,
-    Crawler
+    Exploder
 };
 
 class Zombie : public Entity {

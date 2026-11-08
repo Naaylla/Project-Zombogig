@@ -6,9 +6,7 @@ enum class PropKind {
     Wall,
     Bush,
     Tree,
-    Crate,
-    Barrel,
-    Rock,
+    Plant,
     Corpse,
     Campfire
 };
@@ -23,7 +21,11 @@ public:
     int defense() const;
     int food() const;
     int height() const;
+    int growth() const { return growth_; }
+    bool isFullyGrown() const;
+    void grow();
 
 private:
     PropKind kind_;
+    int growth_;
 };

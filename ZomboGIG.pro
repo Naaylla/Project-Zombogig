@@ -17,7 +17,6 @@ SOURCES += \
     ui/prop.cpp \
     ui/grid.cpp \
     ui/clockwidget.cpp \
-    ui/soundmanager.cpp \
     ui/mapview.cpp \
     ui/mainwindow.cpp
 
@@ -30,6 +29,5 @@ HEADERS += \
     ui/prop.h \
     ui/grid.h \
     ui/clockwidget.h \
-    ui/soundmanager.h \
     ui/mapview.h \
     ui/mainwindow.h
