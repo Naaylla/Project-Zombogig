@@ -1,0 +1,9 @@
+# C++ dependencies for JeuZombie (Qt 6 Widgets)
+# No external libraries are downloaded or vendored.
+#
+# Ubuntu / WSL 2 system packages (already installed):
+#   sudo apt install build-essential qt6-base-dev qt6-base-dev-tools
+#
+# qmake6 is provided by qt6-base-dev-tools.
+# WSLg (Windows 11 / WSL 2) is required to display the Qt window.
+# Qt version used: 6.10.2
