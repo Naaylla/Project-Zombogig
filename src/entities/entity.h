@@ -3,29 +3,52 @@
 #include <QColor>
 #include <QString>
 
-enum class Faction {
-    Human,
-    Zombie
+#include "logic/types.h"
+
+class Game;
+
+enum class Status {
+    Healthy,
+    Infected,
+    Transformed
 };
 
 class Entity {
 public:
-    Entity(Faction faction, int maxHp, int attack, int defense, int speed);
+    Entity(int id, int maxHealth, int attack, int speed, int row, int col);
     virtual ~Entity() = default;
 
-    Faction faction() const { return faction_; }
+    Entity(const Entity&) = delete;
+    Entity& operator=(const Entity&) = delete;
+
+    int id() const { return id_; }
+    int health() const { return health_; }
+    int maxHealth() const { return maxHealth_; }
+    int attack() const { return attack_; }
+    int speed() const { return speed_; }
+    bool alive() const { return health_ > 0; }
+
+    int row() const { return row_; }
+    int col() const { return col_; }
+    void setPosition(int row, int col) {
+        row_ = row;
+        col_ = col;
+    }
+
     virtual QString typeName() const = 0;
     virtual QColor color() const = 0;
+    virtual Sprite sprite() const = 0;
+    virtual void update(Game& game) = 0;
 
-    int maxHp() const { return maxHp_; }
-    int attack() const { return attack_; }
-    int defense() const { return defense_; }
-    int speed() const { return speed_; }
+    void takeDamage(int amount);
+    void heal(int amount);
 
-protected:
-    Faction faction_;
-    int maxHp_;
+private:
+    int id_;
+    int maxHealth_;
+    int health_;
     int attack_;
-    int defense_;
     int speed_;
+    int row_;
+    int col_;
 };
