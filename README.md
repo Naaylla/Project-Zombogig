@@ -1,86 +1,143 @@
 # ZomboGIG
 
-Isometric zombie-survival game built with Qt 6 Widgets, rendered entirely in Qt
-(no external assets or mesh library).
+Jeu de survie isométrique contre des zombies, réalisé avec Qt 6 Widgets. Tout
+est dessiné par Qt : aucun asset externe, aucune bibliothèque 3D.
 
-## Gameplay
+## Le jeu
 
-- 12 x 12 isometric map with a walled compound, campfire, food plants and props.
-- Survive 48 in-game hours (1 turn = 1 hour, the run starts at 07:00 in light rain).
-- Pick the number of survivors and zombies in the main menu, then start or quit.
-- Humans (Farmer, Doctor, Military, Builder) and zombies (Tank, Runner, Exploder)
-  act automatically every turn; humans can eat food, harvest plants, fight,
-  fortify walls and cure infection, while zombies chase, attack and explode.
-- Hordes spawn every 8 hours and grow stronger over time.
-- Food plants regrow each turn (rain doubles growth). Hungry survivors eat from
-  the shared food stock.
-- Infected survivors turn into zombies after a few turns unless a Doctor cures
-  them.
-- Win by surviving all 48 hours; lose when every human is gone.
+- Carte isométrique de 12 x 12 avec un camp entouré de murs, deux portes, deux
+  maisons, un feu de camp, des plants de nourriture et quelques décorations.
+- Un tour = une heure, la partie commence à 07:00 sous une pluie légère. Il n'y
+  a pas de limite de temps : tant qu'il reste des survivants et des zombies, la
+  partie continue.
+- Le menu principal permet de choisir : le nombre de survivants (1 à 12), le
+  nombre de zombies (1 à 30), les plants de départ (0 à 6), la solidité des murs
+  (4 à 20), les métiers humains autorisés, les types de zombies autorisés et une
+  graine aléatoire.
+- Les humains (Farmer, Doctor, Military, Builder) et les zombies (Tank, Runner,
+  Exploder) agissent automatiquement à chaque tour. Les humains mangent,
+  récoltent, soignent, réparent et combattent ; les zombies poursuivent,
+  frappent les murs, les portes et les maisons, et explosent.
+- Les portes restent fermées pendant l'attaque des zombies. Avant d'agir, les
+  survivants ouvrent les portes adjacentes pour circuler ; les zombies peuvent
+  traverser une porte ouverte ou la briser.
+- Une nouvelle vague arrive toutes les 8 heures et devient plus nombreuse avec
+  le temps.
+- Les plants repoussent chaque tour (la pluie double la croissance). La faim
+  baisse de 15 points par tour : un survivant affamé (50 ou moins) prend une
+  unité dans la réserve commune et remonte à 100.
+- Tous les 6 tours, si le camp compte au moins 3 survivants, un enfant rejoint
+  le groupe ou un survivant adulte change de métier. Un enfant devient adulte au
+  bout de 6 tours.
+- Un survivant infecté se transforme en zombie au bout de 4 tours s'il n'est pas
+  soigné par un docteur.
 
-## Controls
+## Conditions de fin de partie
 
-- `Space` - start/pause auto-play
-- `N` or `Right` - advance one hour
-- `1` `2` `3` `4` - set auto-play speed
-- `Esc` - return to the menu
-- `F11` - toggle fullscreen
-- Hover the map to inspect a cell or entity
+La partie s'arrête à la fin d'un tour, dans l'un de ces trois cas :
+
+1. **Défaite — plus aucun survivant.** Dès que la liste des survivants est vide
+   (tués par les zombies ou transformés après infection), l'état passe à
+   `GameOver` avec `victoire_humains = false`. Le message affiché est
+   « THE CAMP HAS FALLEN ».
+2. **Victoire — plus aucun zombie.** Si au moins un survivant est encore en vie
+   et que la horde est vide, l'état passe à `GameOver` avec
+   `victoire_humains = true`. Le message affiché est « THE HORDE IS GONE ».
+3. **Défaite — réserve de nourriture vide.** Si `stock_nourriture` tombe à 0,
+   c'est la famine et la partie est perdue.
+
+Points importants :
+
+- La défaite par survivants est vérifiée avant la victoire, puis la famine.
+- Les survivants infectés mais pas encore transformés comptent encore comme
+  vivants ; ils ne sont retirés qu'à leur transformation (4 tours d'infection).
+- Des vagues continuent d'arriver tant que la partie dure : pour gagner, il faut
+  détruire la horde avant la vague suivante.
+
+## Contrôles
+
+- `Espace` — lancer / mettre en pause le déroulement automatique
+- `N` ou `→` — avancer d'une heure
+- `1` `2` `3` `4` — vitesse du déroulement automatique
+- `Échap` — retour au menu
+- `F11` — plein écran
+- **Survoler une case de la carte affiche ses statistiques** (type, points de
+  vie, murs, plants, décorations).
 
 ## Interface
 
-- Animated rain while the weather is rainy, clearing after the first few hours.
-- Day/night lighting, campfire glow, drifting fog and blood splatters.
-- Project-Zomboid-style grunge HUD and menu with a short intro story.
-- Responsive layout: the window starts maximised and the HUD scales with height.
-- Optional zombie-style font: drop a `.ttf`/`.otf` file into a `fonts/` folder
-  next to the executable (or in the project root) and it is loaded automatically.
+- Pluie animée tant que le temps est pluvieux, puis éclaircie.
+- Éclairage jour/nuit, lueur du feu de camp, brouillard dérivant et taches de
+  sang.
+- HUD et menu au style « survie » usé, avec un court texte d'introduction.
+- Interface adaptative : la fenêtre s'ouvre maximisée et le HUD suit la hauteur.
+- Police optionnelle : placez un fichier `.ttf`/`.otf` dans un dossier `fonts/`
+  à côté de l'exécutable (ou à la racine du projet), il sera chargé
+  automatiquement.
 
-## Project layout
+## Organisation du projet
 
-The code is split so each class has one job:
+Le code est rangé par rôle pour rester simple à lire et à présenter. Il n'y a
+pas de fichiers d'en-tête : chaque module contient ses déclarations puis son
+code, et `main.cpp` les assemble dans l'ordre.
 
-- `src/logic/` - `Game` (turns, waves, weather, win/loss) plus `Grid`, `Cell`,
-  `Wall`, `Plant` and the shared enums in `types.h`.
-- `src/entities/` - one file per entity: `Entity` (abstract), `Human`
-  (`Farmer`, `Doctor`, `Military`, `Builder`) and `Zombie` (`Tank`, `Runner`,
-  `Exploder`). Each class keeps its own behaviour.
-- `src/ui/` - every widget, the map renderer, the menu and the HUD.
-- `src/main.cpp` - application entry point.
+- `src/main.cpp` — le cœur du jeu : la classe `Game`, les énumérations
+  `GameState` et `Weather`, les tours, les portes, les vagues, la météo, les
+  apparitions, l'accueil de nouveaux survivants et la fin de partie.
+- `src/logic/world.cpp` — le plateau : `Wall` (mur, porte ou maison), `Plant`,
+  `Cell` et `Grid` (occupation des cases, murs, plantes, décorations).
+- `src/entities/human.cpp` — `Entity` (base commune), `Human`, l'énumération
+  `HumanType` (`Farmer`, `Doctor`, `Military`, `Builder`, `Child`), leurs
+  statistiques, leurs capacités et les déplacements communs.
+- `src/entities/zombie.cpp` — `Zombie`, l'énumération `ZombieType`, les
+  statistiques et capacités de `Tank`, `Runner` et `Exploder`.
+- `src/ui/ui.cpp` — les widgets, le rendu de la carte, le menu et le HUD.
+- Fabriques : `creer_humain` et `creer_zombie`.
 
-Model classes: `Game`, `GameState`, `Grid`, `Cell`, `Entity` (abstract),
-`Human` (`Farmer`, `Doctor`, `Military`, `Builder`), `Zombie` (`Tank`, `Runner`,
-`Exploder`), `Plant`, `Wall`, `Status`.
+Classes du modèle : `Game`, `GameState`, `Grid`, `Cell`, `Entity` (abstraite),
+`Human`, `Zombie`, `Plant`, `Wall`, `Status`.
 
-## Build (WSL / Ubuntu)
+## À propos du code et de l'IA
+
+L'interface et le design visuel dans `src/ui/` ont été réalisés avec l'aide d'un
+assistant IA. La simulation elle-même — tout `src/logic/` et `src/entities/`,
+c'est-à-dire les règles du jeu et les classes d'entités — a été écrite par
+l'étudiant sans IA et peut être expliquée ligne par ligne.
+
+Les noms dans `src/logic/` et `src/entities/` sont volontairement descriptifs
+(par exemple `survivant_le_plus_proche`, `mur_abime_a_cote`,
+`durabilite_initiale_murs`) et le code est aéré (accolades Allman, une idée par
+ligne) pour être lu et présenté en cours.
+
+## Compilation (WSL / Ubuntu)
 
 ```sh
 make
 ```
 
-The Makefile runs a shadow build in `build/` through `qmake6`.
+Le Makefile lance une compilation dans `build/` via `qmake6`.
 
-## Run
+## Lancer le jeu
 
 ```sh
 make run
 ```
 
-or:
+ou :
 
 ```sh
 ./build/ZomboGIG
 ```
 
-## Clean
+## Nettoyer
 
 ```sh
 make clean
 ```
 
-## Requirements
+## Prérequis
 
-- g++ with C++20
+- g++ avec C++20
 - make
 - qt6-base-dev, qt6-base-dev-tools (Qt 6.10.2)
-- WSLg for the window (WSL 2 on Windows 11)
+- WSLg pour la fenêtre (WSL 2 sous Windows 11)

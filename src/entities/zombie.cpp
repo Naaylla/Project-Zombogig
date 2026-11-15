@@ -1,16 +1,41 @@
-#include "entities/zombie.h"
+#include <memory>
 
-#include "entities/exploder.h"
-#include "entities/human.h"
-#include "entities/runner.h"
-#include "entities/tank.h"
-#include "logic/game.h"
-#include "logic/wall.h"
+class Zombie : public Entity
+{
+public:
+    Zombie(int numero, ZombieType type, int ligne, int colonne);
 
-namespace {
+    ZombieType type_zombie() const { return type_zombie_actuel; }
+    QString nom_type() const override;
+    QColor couleur() const override;
+    Sprite sprite() const override;
+    void agir(Game& jeu) override;
 
-ZombieStats zombieStats(ZombieType type) {
-    switch (type) {
+private:
+    int nombre_pas() const;
+    void attaquer_obstacle(Game& jeu);
+
+    ZombieType type_zombie_actuel;
+};
+
+enum class ZombieType : int
+{
+    Tank,
+    Runner,
+    Exploder
+};
+
+struct ZombieStats
+{
+    int vie_max;
+    int attaque;
+    int vitesse;
+};
+
+ZombieStats stats_zombie(ZombieType type)
+{
+    switch (type)
+    {
     case ZombieType::Tank:
         return {22, 3, 1};
     case ZombieType::Runner:
@@ -18,11 +43,14 @@ ZombieStats zombieStats(ZombieType type) {
     case ZombieType::Exploder:
         return {11, 2, 1};
     }
+
     return {8, 2, 1};
 }
 
-QString zombieName(ZombieType type) {
-    switch (type) {
+QString nom_type_zombie(ZombieType type)
+{
+    switch (type)
+    {
     case ZombieType::Tank:
         return QStringLiteral("Tank Zombie");
     case ZombieType::Runner:
@@ -30,11 +58,14 @@ QString zombieName(ZombieType type) {
     case ZombieType::Exploder:
         return QStringLiteral("Exploder Zombie");
     }
+
     return QStringLiteral("Zombie");
 }
 
-QColor zombieColor(ZombieType type) {
-    switch (type) {
+QColor couleur_type_zombie(ZombieType type)
+{
+    switch (type)
+    {
     case ZombieType::Tank:
         return QColor(66, 78, 62);
     case ZombieType::Runner:
@@ -42,11 +73,14 @@ QColor zombieColor(ZombieType type) {
     case ZombieType::Exploder:
         return QColor(92, 104, 74);
     }
+
     return QColor(90, 100, 78);
 }
 
-Sprite zombieSprite(ZombieType type) {
-    switch (type) {
+Sprite sprite_type_zombie(ZombieType type)
+{
+    switch (type)
+    {
     case ZombieType::Tank:
         return Sprite::Tank;
     case ZombieType::Runner:
@@ -54,90 +88,124 @@ Sprite zombieSprite(ZombieType type) {
     case ZombieType::Exploder:
         return Sprite::Exploder;
     }
+
     return Sprite::Tank;
 }
 
-}  // namespace
-
-Zombie::Zombie(int id, ZombieType type, int row, int col)
-    : Entity(id, zombieStats(type).health, zombieStats(type).attack,
-             zombieStats(type).speed, row, col),
-      type_(type) {}
-
-QString Zombie::typeName() const {
-    return zombieName(type_);
+Zombie::Zombie(int numero, ZombieType type, int ligne, int colonne)
+    : Entity(numero,
+             stats_zombie(type).vie_max,
+             stats_zombie(type).attaque,
+             stats_zombie(type).vitesse,
+             ligne,
+             colonne),
+      type_zombie_actuel(type)
+{
 }
 
-QColor Zombie::color() const {
-    return zombieColor(type_);
+QString Zombie::nom_type() const
+{
+    return nom_type_zombie(type_zombie_actuel);
 }
 
-Sprite Zombie::sprite() const {
-    return zombieSprite(type_);
+QColor Zombie::couleur() const
+{
+    return couleur_type_zombie(type_zombie_actuel);
 }
 
-void Zombie::update(Game& game) {
-    if (!alive()) {
-        return;
-    }
+Sprite Zombie::sprite() const
+{
+    return sprite_type_zombie(type_zombie_actuel);
+}
 
-    Human* target = game.nearestHuman(*this);
-    if (!target) {
-        game.wander(*this);
-        return;
-    }
+int Zombie::nombre_pas() const
+{
+    return type_zombie_actuel == ZombieType::Runner ? 2 : 1;
+}
 
-    if (explodesAtRange(Game::manhattan(*this, *target))) {
-        explode(game);
-        return;
-    }
+void Zombie::attaquer_obstacle(Game& jeu)
+{
+    const int decalage_ligne[4] = {-1, 1, 0, 0};
+    const int decalage_colonne[4] = {0, 0, -1, 1};
 
-    for (int step = 0; step < steps(); ++step) {
-        if (!target->alive() ||
-            Game::manhattan(*this, *target) <= 1) {
-            break;
-        }
-        if (game.stepToward(*this, target->row(), target->col())) {
+    for (int direction = 0; direction < 4; direction++)
+    {
+        const int ligne_voisine = ligne() + decalage_ligne[direction];
+        const int colonne_voisine =
+            colonne() + decalage_colonne[direction];
+
+        if (!jeu.grille().dans_grille(ligne_voisine, colonne_voisine))
+        {
             continue;
         }
 
-        const int dr[4] = {-1, 1, 0, 0};
-        const int dc[4] = {0, 0, -1, 1};
-        for (int i = 0; i < 4; ++i) {
-            const int row = this->row() + dr[i];
-            const int col = this->col() + dc[i];
-            if (!game.grid().isInside(row, col)) {
-                continue;
-            }
-            Wall* wall = game.grid().cell(row, col).wall();
-            if (wall && !wall->isDestroyed()) {
-                wall->takeDamage(attack());
-                game.log(typeName() + QStringLiteral(" hits a wall."));
-                break;
-            }
+        Cell& cellule = jeu.grille().cellule(ligne_voisine,
+                                             colonne_voisine);
+        Wall* obstacle = cellule.mur();
+
+        if (obstacle == nullptr || obstacle->est_detruit())
+        {
+            continue;
         }
+
+        obstacle->prendre_degats(attaque());
+        jeu.noter_evenement(nom_type() +
+                            QStringLiteral(" breaks a barricade."));
+        return;
+    }
+}
+
+void Zombie::agir(Game& jeu)
+{
+    if (!est_vivant())
+    {
+        return;
+    }
+
+    Human* cible = jeu.survivant_le_plus_proche(*this);
+
+    if (cible == nullptr)
+    {
+        errer(jeu);
+        return;
+    }
+
+    if (type_zombie_actuel == ZombieType::Exploder &&
+        Game::distance_manhattan(*this, *cible) <= 1)
+    {
+        jeu.exploser_zombie(*this);
+        return;
+    }
+
+    for (int pas = 0; pas < nombre_pas(); pas++)
+    {
+        if (!cible->est_vivant() ||
+            Game::distance_manhattan(*this, *cible) <= 1)
+        {
+            break;
+        }
+
+        if (avancer_vers(jeu, cible->ligne(), cible->colonne()))
+        {
+            continue;
+        }
+
+        attaquer_obstacle(jeu);
         break;
     }
 
-    if (target->alive() && Game::manhattan(*this, *target) <= 1) {
-        target->takeDamage(attack());
-        game.addBlood(target->row(), target->col());
-        game.log(typeName() + QStringLiteral(" wounds a survivor."));
+    if (cible->est_vivant() &&
+        Game::distance_manhattan(*this, *cible) <= 1)
+    {
+        cible->prendre_degats(attaque());
+        jeu.ajouter_sang(cible->ligne(), cible->colonne());
+        jeu.noter_evenement(nom_type() +
+                            QStringLiteral(" wounds a survivor."));
     }
 }
 
-void Zombie::explode(Game& game) {
-    game.explodeZombie(*this);
-}
-
-std::unique_ptr<Zombie> makeZombie(int id, ZombieType type, int row, int col) {
-    switch (type) {
-    case ZombieType::Tank:
-        return std::make_unique<Tank>(id, row, col);
-    case ZombieType::Runner:
-        return std::make_unique<Runner>(id, row, col);
-    case ZombieType::Exploder:
-        return std::make_unique<Exploder>(id, row, col);
-    }
-    return std::make_unique<Tank>(id, row, col);
+std::unique_ptr<Zombie> creer_zombie(int numero, ZombieType type, int ligne,
+                                     int colonne)
+{
+    return std::make_unique<Zombie>(numero, type, ligne, colonne);
 }

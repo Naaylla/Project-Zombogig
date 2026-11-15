@@ -1,31 +1,37 @@
-#include "ui/ui.h"
-
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QEvent>
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QFrame>
+#include <QGridLayout>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QLineF>
 #include <QLinearGradient>
+#include <QMainWindow>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
+#include <QPixmap>
 #include <QPointF>
 #include <QPolygon>
 #include <QPolygonF>
@@ -38,6 +44,224 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QVector>
+#include <QWidget>
+
+class QKeyEvent;
+class QLabel;
+class QMouseEvent;
+class QPaintEvent;
+class QPushButton;
+class QResizeEvent;
+class QSpinBox;
+class QTimer;
+class QButtonGroup;
+class QCheckBox;
+class QLineEdit;
+
+class HudBar : public QWidget {
+public:
+    explicit HudBar(bool top, QWidget* parent = nullptr);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    bool top_;
+};
+
+class ClockWidget : public QWidget {
+public:
+    explicit ClockWidget(QWidget* parent = nullptr);
+
+    void setMinutes(int minutes);
+    QSize sizeHint() const override;
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    int minutes_;
+};
+
+class MapView : public QWidget {
+public:
+    explicit MapView(Game& game, QWidget* parent = nullptr);
+
+    QSize sizeHint() const override;
+    void refreshWorld();
+    void syncWeather();
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void leaveEvent(QEvent* event) override;
+
+private:
+    struct Drop {
+        qreal x;
+        qreal y;
+        qreal speed;
+        qreal length;
+    };
+
+    void buildMapLayer();
+    void rebuildStatic();
+    void updatePlacement();
+    void buildVignette();
+    void initRain();
+    void stepRain();
+
+    void drawBackground(QPainter& painter);
+    void drawMap(QPainter& painter);
+    void drawAmbient(QPainter& painter);
+    void drawCampfireGlow(QPainter& painter);
+    void drawHover(QPainter& painter);
+    void drawRain(QPainter& painter);
+    void drawTooltip(QPainter& painter);
+
+    qreal daylight() const;
+    QPointF cacheToWidget(qreal x, qreal y) const;
+    bool cellAt(const QPointF& point, int& row, int& col) const;
+
+    Game& game_;
+    QPixmap mapLayer_;
+    QPixmap staticScene_;
+    QPixmap vignette_;
+    QVector<Drop> drops_;
+    QTimer* rainTimer_;
+    QElapsedTimer rainClock_;
+    QPoint mousePos_;
+    int hoverRow_;
+    int hoverCol_;
+    qreal mapScale_;
+    QPoint mapTopLeft_;
+    int fireRow_;
+    int fireCol_;
+};
+
+class MenuOverlay : public QWidget {
+public:
+    explicit MenuOverlay(QWidget* parent = nullptr);
+
+    QPushButton* startButton() const { return startButton_; }
+    QPushButton* quitButton() const { return quitButton_; }
+    QPushButton* launchButton() const { return launchButton_; }
+    QPushButton* backButton() const { return backButton_; }
+
+    void showSetup();
+    void showMenu();
+
+    int survivors() const;
+    int zombies() const;
+    int plants() const;
+    int defense() const;
+    unsigned seed() const;
+    std::vector<HumanType> humanTypes() const;
+    std::vector<ZombieType> zombieTypes() const;
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    QWidget* menuPage_;
+    QWidget* setupPage_;
+    QLabel* title_;
+    QLabel* subtitle_;
+    QLabel* story_;
+    QSpinBox* survivorsSpin_;
+    QSpinBox* zombiesSpin_;
+    QSpinBox* plantsSpin_;
+    QSpinBox* defenseSpin_;
+    QLineEdit* seedEdit_;
+    QVector<QCheckBox*> humanChecks_;
+    QVector<QCheckBox*> zombieChecks_;
+    QPushButton* startButton_;
+    QPushButton* quitButton_;
+    QPushButton* launchButton_;
+    QPushButton* backButton_;
+};
+
+class EndOverlay : public QWidget {
+public:
+    explicit EndOverlay(QWidget* parent = nullptr);
+
+    void setResult(bool won, int turns, int humans, int zombies);
+    QPushButton* againButton() const { return againButton_; }
+    QPushButton* menuButton() const { return menuButton_; }
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    QLabel* title_;
+    QLabel* subtitle_;
+    QLabel* detail_;
+    QLabel* tagline_;
+    QPushButton* againButton_;
+    QPushButton* menuButton_;
+};
+
+class MainWindow : public QMainWindow {
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+
+private:
+    void buildGamePage();
+    void buildOverlays();
+    void applyUiScale();
+
+    void startGame();
+    void replayGame();
+    void returnToMenu();
+    void advanceTurn();
+    void afterTurn();
+    void refreshHud();
+    void updateAutoTimer();
+    void toggleAutoPlay();
+    void setSpeed(int speed);
+
+    Game game_;
+    QWidget* page_;
+    QWidget* topBar_;
+    QWidget* bottomBar_;
+    QWidget* sidePanel_;
+    QWidget* statsHost_;
+    MapView* map_;
+    ClockWidget* clock_;
+    MenuOverlay* menu_;
+    EndOverlay* end_;
+
+    QLabel* titleLabel_;
+    QLabel* subtitleLabel_;
+    QLabel* timeLabel_;
+    QLabel* dayLabel_;
+    QLabel* weatherLabel_;
+    QLabel* waveLabel_;
+    QLabel* eventLabel_;
+    QLabel* hintLabel_;
+    QLabel* zombieValue_;
+    QLabel* humanValue_;
+    QLabel* infectedValue_;
+    QLabel* foodValue_;
+    QLabel* defenseValue_;
+
+    QPushButton* autoButton_;
+    QPushButton* nextButton_;
+    QVector<QPushButton*> speedButtons_;
+    QButtonGroup* speedGroup_;
+    QTimer* autoTimer_;
+
+    int speed_;
+    bool autoPlaying_;
+    qreal uiScale_;
+    QString displayFont_;
+};
 
 namespace {
 
@@ -65,7 +289,8 @@ QColor mixColor(const QColor& a, const QColor& b, qreal t) {
 
 bool isHumanSprite(Sprite sprite) {
     return sprite == Sprite::Farmer || sprite == Sprite::Doctor ||
-           sprite == Sprite::Military || sprite == Sprite::Builder;
+           sprite == Sprite::Military || sprite == Sprite::Builder ||
+           sprite == Sprite::Child;
 }
 
 QString displayFontFallback() {
@@ -164,7 +389,7 @@ void drawWall(QPainter& painter, int cx, int topY, const Wall& wall) {
     const QPoint left(cx - TOP_HALF_WIDTH, topY);
     const QPoint right(cx + TOP_HALF_WIDTH, topY);
 
-    if (wall.isDestroyed()) {
+    if (wall.est_detruit()) {
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(48, 42, 34, 170));
         painter.drawEllipse(QPointF(cx - 18, topY - 2), 12, 4);
@@ -174,6 +399,61 @@ void drawWall(QPainter& painter, int cx, int topY, const Wall& wall) {
                             << QPoint(cx - 26, topY + 2)
                             << QPoint(cx - 12, topY - 8)
                             << QPoint(cx + 1, topY + 3));
+        return;
+    }
+
+    if (wall.est_porte()) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(54, 47, 38));
+        painter.drawRect(QRectF(left.x() - 2, left.y() - wallHeight,
+                                4, wallHeight + 3));
+        painter.drawRect(QRectF(right.x() - 2, right.y() - wallHeight,
+                                4, wallHeight + 3));
+
+        if (wall.est_ouverte()) {
+            painter.setBrush(QColor(40, 34, 28, 170));
+            painter.drawRect(QRectF(cx - 30, topY - 3, 60, 5));
+        } else {
+            painter.setBrush(QColor(118, 86, 52));
+            painter.drawPolygon(QPolygon()
+                                << QPoint(cx - 34, topY - 2)
+                                << QPoint(cx - 30, topY - wallHeight)
+                                << QPoint(cx + 30, topY - wallHeight)
+                                << QPoint(cx + 34, topY - 2));
+            painter.setPen(QPen(QColor(74, 52, 32), 1));
+            for (int i = 1; i <= 3; ++i) {
+                const int drop = wallHeight * i / 4;
+                painter.drawLine(cx - 32, topY - drop,
+                                 cx + 32, topY - drop);
+            }
+            painter.setPen(Qt::NoPen);
+        }
+        return;
+    }
+
+    if (wall.est_maison()) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(92, 74, 56));
+        painter.drawPolygon(QPolygon()
+                            << QPoint(cx - 40, topY)
+                            << QPoint(cx - 34, topY - 38)
+                            << QPoint(cx + 34, topY - 38)
+                            << QPoint(cx + 40, topY));
+        painter.setBrush(QColor(58, 46, 36));
+        painter.drawPolygon(QPolygon()
+                            << QPoint(cx - 46, topY - 36)
+                            << QPoint(cx, topY - 62)
+                            << QPoint(cx + 46, topY - 36));
+        painter.setBrush(QColor(206, 168, 92, 190));
+        painter.drawRect(QRectF(cx - 8, topY - 28, 14, 12));
+        painter.setBrush(QColor(46, 36, 28));
+        painter.drawRect(QRectF(cx + 16, topY - 22, 12, 20));
+
+        if (wall.durabilite() * 2 < wall.durabilite_max()) {
+            painter.setPen(QPen(QColor(34, 29, 24, 190), 1));
+            painter.drawLine(cx - 24, topY - 30, cx - 10, topY - 20);
+            painter.setPen(Qt::NoPen);
+        }
         return;
     }
 
@@ -212,7 +492,7 @@ void drawWall(QPainter& painter, int cx, int topY, const Wall& wall) {
                                 4, wallHeight + 3));
     }
 
-    if (wall.durability() * 2 < wall.maxDurability()) {
+    if (wall.durabilite() * 2 < wall.durabilite_max()) {
         painter.setPen(QPen(QColor(34, 29, 24, 190), 1));
         painter.drawLine(cx - 26, topY - 16, cx - 14, topY - 24);
         painter.drawLine(cx + 8, topY - 12, cx + 22, topY - 24);
@@ -229,11 +509,11 @@ void drawPlant(QPainter& painter, int cx, int topY, const Plant& plant) {
     painter.drawEllipse(QPointF(cx - 9, topY), 8, 3);
     painter.drawEllipse(QPointF(cx + 9, topY), 8, 3);
 
-    const int leaves = 3 + plant.growth();
+    const int leaves = 3 + plant.croissance();
     for (int i = 0; i < leaves; ++i) {
         const qreal dx = (i - (leaves - 1) / 2.0) * 7.0;
         const qreal tipX = cx + dx * 1.4;
-        const qreal tipY = topY - 9 - plant.growth() * 3;
+        const qreal tipY = topY - 9 - plant.croissance() * 3;
         painter.setPen(QPen(QColor(66, 102, 54), 2));
         painter.drawLine(QPointF(cx + dx, topY), QPointF(tipX, tipY));
         painter.setPen(Qt::NoPen);
@@ -241,7 +521,7 @@ void drawPlant(QPainter& painter, int cx, int topY, const Plant& plant) {
         painter.drawEllipse(QPointF(tipX, tipY), 3.5, 2.5);
     }
 
-    if (plant.growth() >= 2) {
+    if (plant.croissance() >= 2) {
         painter.setBrush(QColor(176, 74, 52));
         painter.drawEllipse(QPointF(cx - 5, topY - 14), 2, 2);
         painter.drawEllipse(QPointF(cx + 6, topY - 16), 2, 2);
@@ -369,7 +649,7 @@ void drawBloodSplat(QPainter& painter, int cx, int groundY, quint32 seed) {
 void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
     const Sprite sprite = entity.sprite();
     const bool human = isHumanSprite(sprite);
-    const QColor body = entity.color();
+    const QColor body = entity.couleur();
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(0, 0, 0, 70));
@@ -380,6 +660,13 @@ void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
     int waistY = topY - 18;
     int halfBody = human ? 10 : 11;
     bool lean = false;
+
+    if (sprite == Sprite::Child) {
+        halfBody = 7;
+        headY = topY - 36;
+        shoulderY = topY - 30;
+        waistY = topY - 13;
+    }
 
     switch (sprite) {
     case Sprite::Tank:
@@ -491,7 +778,7 @@ void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
         }
     }
 
-    if (entity.health() < entity.maxHealth()) {
+    if (entity.vie() < entity.vie_max()) {
         const int barWidth = halfBody * 2;
         const int barHeight = 4;
         const int barY = headY - 14;
@@ -500,7 +787,7 @@ void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
         painter.drawRect(QRectF(cx - barWidth / 2.0, barY, barWidth, barHeight));
         painter.setBrush(human ? QColor(118, 168, 104) : QColor(176, 54, 42));
         const qreal ratio =
-            static_cast<qreal>(entity.health()) / entity.maxHealth();
+            static_cast<qreal>(entity.vie()) / entity.vie_max();
         painter.drawRect(QRectF(cx - barWidth / 2.0, barY,
                                 barWidth * ratio, barHeight));
     }
@@ -552,10 +839,12 @@ void paintGrime(QPainter& painter, const QRect& rect, quint32 seed,
     }
     painter.setPen(Qt::NoPen);
 
+    const qreal splatRadius =
+        std::clamp(rect.height() * 0.42, 22.0, 78.0);
     for (int i = 0; i < splats; ++i) {
-        const qreal cx = rect.left() + rect.width() * (0.06 + 0.2 * i);
+        const qreal cx = rect.left() + rect.width() * (0.09 + 0.15 * i);
         const qreal cy = rect.top() + rect.height() * (i % 2 == 0 ? 0.55 : 0.28);
-        drawSplat(painter, cx, cy, rect.height() * 0.42,
+        drawSplat(painter, cx, cy, splatRadius,
                   seed + static_cast<quint32>(i) * 17u);
     }
 }
@@ -589,33 +878,84 @@ void drawZombieSilhouette(QPainter& painter, const QPointF& base,
     painter.restore();
 }
 
-void drawSurvivor(QPainter& painter, const QPointF& base, qreal scale) {
+void drawDoorGuard(QPainter& painter, const QPointF& base, qreal scale) {
     painter.save();
     painter.translate(base);
     painter.scale(scale, scale);
+    painter.rotate(2.0);
     painter.setPen(Qt::NoPen);
 
-    painter.setBrush(QColor(0, 0, 0, 140));
-    painter.drawEllipse(QPointF(0, 2), 26, 8);
+    painter.setBrush(QColor(0, 0, 0, 165));
+    painter.drawEllipse(QPointF(-2, 2), 26, 8);
 
-    painter.setBrush(QColor(26, 25, 27));
-    painter.drawRoundedRect(QRectF(-16, -40, 32, 40), 12, 12);
-    painter.setBrush(QColor(31, 30, 29));
-    painter.drawEllipse(QPointF(-2, -46), 11, 12);
-    painter.setBrush(QColor(176, 150, 122));
-    painter.drawEllipse(QPointF(-3, -43), 7, 8);
-    painter.setBrush(QColor(28, 26, 24));
-    painter.drawEllipse(QPointF(-3, -50), 8, 7);
+    painter.setBrush(QColor(32, 30, 31));
+    painter.drawRoundedRect(QRectF(-11.5, -27, 9.5, 28), 4, 4);
+    painter.drawRoundedRect(QRectF(2, -27, 9.5, 28), 4, 4);
 
-    painter.setBrush(QColor(22, 21, 22));
-    painter.drawRoundedRect(QRectF(-18, -14, 16, 14), 6, 6);
-    painter.drawRoundedRect(QRectF(2, -14, 16, 14), 6, 6);
+    QPolygonF torso;
+    torso << QPointF(-14, -26) << QPointF(12, -26)
+          << QPointF(17, -52) << QPointF(-10, -48);
+    painter.setBrush(QColor(32, 30, 31));
+    painter.drawPolygon(torso);
 
-    painter.setPen(QPen(QColor(22, 21, 22), 4, Qt::SolidLine,
+    QPolygonF rim;
+    rim << QPointF(-14, -26) << QPointF(-10, -48)
+        << QPointF(-5, -48) << QPointF(-8, -26);
+    painter.setBrush(QColor(96, 80, 58, 120));
+    painter.drawPolygon(rim);
+
+    painter.setPen(QPen(QColor(32, 30, 31), 6, Qt::SolidLine,
                         Qt::RoundCap));
-    painter.drawLine(QPointF(-12, -30), QPointF(-2, -17));
-    painter.drawLine(QPointF(8, -32), QPointF(0, -17));
+    painter.drawLine(QPointF(8, -48), QPointF(26, -41));
+    painter.drawLine(QPointF(7, -38), QPointF(23, -30));
+    painter.setPen(Qt::NoPen);
+
+    painter.setBrush(QColor(132, 106, 82));
+    painter.drawEllipse(QPointF(28, -41), 3.6, 4.0);
+    painter.drawEllipse(QPointF(25, -30), 3.6, 4.0);
+
+    painter.setBrush(QColor(26, 24, 22));
+    painter.drawEllipse(QPointF(7, -58), 9, 10);
+    painter.setBrush(QColor(88, 70, 54));
+    painter.drawEllipse(QPointF(11, -56), 5, 6);
+    painter.setBrush(QColor(26, 24, 22));
+    painter.drawEllipse(QPointF(13, -60), 4, 3.2);
     painter.restore();
+}
+
+void drawDoor(QPainter& painter, const QPointF& top, const QPointF& right,
+              qreal wallHeight) {
+    const auto at = [&](qreal t) {
+        return QPointF(top.x() + (right.x() - top.x()) * t,
+                       top.y() + (right.y() - top.y()) * t);
+    };
+    const QPointF a = at(0.44);
+    const QPointF b = at(0.78);
+    const qreal doorHeight = wallHeight * 0.86;
+
+    QPolygonF door;
+    door << a << b
+         << QPointF(b.x(), b.y() - doorHeight)
+         << QPointF(a.x(), a.y() - doorHeight);
+    painter.setPen(QPen(QColor(86, 68, 46), 3));
+    painter.setBrush(QColor(50, 40, 29));
+    painter.drawPolygon(door);
+
+    painter.setPen(QPen(QColor(30, 24, 18), 1));
+    for (int i = 1; i < 5; ++i) {
+        const qreal t = i / 5.0;
+        const QPointF foot(a.x() + (b.x() - a.x()) * t,
+                           a.y() + (b.y() - a.y()) * t);
+        painter.drawLine(foot, QPointF(foot.x(), foot.y() - doorHeight));
+    }
+    painter.drawLine(QPointF(a.x(), a.y() - doorHeight * 0.5),
+                     QPointF(b.x(), b.y() - doorHeight * 0.5));
+
+    const QPointF handle(b.x() - (b.x() - a.x()) * 0.18,
+                         b.y() - doorHeight * 0.46);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(158, 126, 74));
+    painter.drawEllipse(handle, 2.2, 3.2);
 }
 
 void paintMenuScene(QPainter& painter, const QRect& rect) {
@@ -632,12 +972,13 @@ void paintMenuScene(QPainter& painter, const QRect& rect) {
     painter.scale(k, k);
 
     painter.setPen(Qt::NoPen);
-    QRadialGradient warmth(QPointF(10, -30), 330);
-    warmth.setColorAt(0.0, QColor(198, 120, 56, 74));
-    warmth.setColorAt(0.5, QColor(92, 48, 26, 32));
+    QRadialGradient warmth(QPointF(10, -30), 380);
+    warmth.setColorAt(0.0, QColor(198, 120, 56, 62));
+    warmth.setColorAt(0.45, QColor(110, 58, 30, 28));
+    warmth.setColorAt(0.75, QColor(60, 32, 18, 12));
     warmth.setColorAt(1.0, QColor(0, 0, 0, 0));
     painter.setBrush(warmth);
-    painter.drawEllipse(QPointF(0, -20), 340, 250);
+    painter.drawEllipse(QPointF(0, -20), 390, 290);
 
     drawZombieSilhouette(painter, QPointF(-300, 40), 0.85);
     drawZombieSilhouette(painter, QPointF(268, -38), 0.75);
@@ -653,7 +994,7 @@ void paintMenuScene(QPainter& painter, const QRect& rect) {
     QPolygonF floor;
     floor << top << right << bottom << leftPoint;
     painter.setPen(QPen(QColor(17, 15, 13), 2));
-    painter.setBrush(QColor(46, 40, 32));
+    painter.setBrush(QColor(58, 50, 39));
     painter.drawPolygon(floor);
 
     painter.setPen(QPen(QColor(66, 57, 45, 150), 1));
@@ -671,69 +1012,112 @@ void paintMenuScene(QPainter& painter, const QRect& rect) {
                     right.y() + (bottom.y() - right.y()) * t));
     }
 
+    const auto leftWallPoint = [&](qreal t) {
+        return QPointF(top.x() + (leftPoint.x() - top.x()) * t,
+                       top.y() + (leftPoint.y() - top.y()) * t);
+    };
+
     QPolygonF leftWall;
     leftWall << top << leftPoint
              << QPointF(leftPoint.x(), leftPoint.y() - wallHeight)
              << QPointF(top.x(), top.y() - wallHeight);
     painter.setPen(QPen(QColor(14, 13, 11), 2));
-    painter.setBrush(QColor(30, 27, 23));
+    painter.setBrush(QColor(34, 30, 25));
     painter.drawPolygon(leftWall);
+
+    painter.setPen(QPen(QColor(76, 64, 48, 130), 1.2));
+    painter.drawLine(QPointF(top.x(), top.y() - wallHeight),
+                     QPointF(leftPoint.x(), leftPoint.y() - wallHeight));
+
+    painter.setPen(QPen(QColor(46, 40, 32, 130), 1));
+    for (int i = 1; i < 5; ++i) {
+        const qreal t = i / 5.0;
+        const QPointF base = leftWallPoint(t);
+        painter.drawLine(base, QPointF(base.x(), base.y() - wallHeight));
+    }
 
     QPolygonF rightWall;
     rightWall << top << right
               << QPointF(right.x(), right.y() - wallHeight)
               << QPointF(top.x(), top.y() - wallHeight);
-    painter.setBrush(QColor(23, 21, 18));
+    painter.setBrush(QColor(30, 27, 23));
     painter.drawPolygon(rightWall);
+
+    painter.setPen(QPen(QColor(80, 68, 50, 130), 1.2));
+    painter.drawLine(
+        QPointF(top.x(), top.y() - wallHeight),
+        QPointF(right.x(), right.y() - wallHeight));
 
     painter.setPen(QPen(QColor(48, 42, 34, 130), 1));
     for (int i = 1; i < 5; ++i) {
         const qreal t = i / 5.0;
-        const QPointF a(top.x() + (leftPoint.x() - top.x()) * t,
-                        top.y() + (leftPoint.y() - top.y()) * t);
-        painter.drawLine(a, QPointF(a.x(), a.y() - wallHeight));
         const QPointF b(top.x() + (right.x() - top.x()) * t,
                         top.y() + (right.y() - top.y()) * t);
         painter.drawLine(b, QPointF(b.x(), b.y() - wallHeight));
     }
 
-    const QPointF lampPos(24, -halfHeight - wallHeight + 22);
+    drawDoor(painter, top, right, wallHeight);
+
+    QPainterPath floorClip;
+    floorClip.addPolygon(floor);
+    painter.save();
+    painter.setClipPath(floorClip);
+
+    QRandomGenerator stainRng(0xB100D7u);
+    for (int index = 0; index < 11; ++index) {
+        const qreal floorU =
+            0.12 + stainRng.generateDouble() * 0.76;
+        const qreal floorV =
+            0.12 + stainRng.generateDouble() * 0.76;
+        const qreal x = (floorU - floorV) * halfWidth;
+        const qreal y =
+            -halfHeight + (floorU + floorV) * halfHeight;
+
+        QPainterPath splat;
+        const int blobCount = 3 + stainRng.bounded(3);
+
+        for (int blobIndex = 0; blobIndex < blobCount; ++blobIndex) {
+            const qreal blobX =
+                x + (stainRng.generateDouble() - 0.5) * 16.0;
+            const qreal blobY =
+                y + (stainRng.generateDouble() - 0.5) * 9.0;
+            const qreal radius =
+                3.0 + stainRng.generateDouble() * 5.5;
+
+            splat.addEllipse(
+                QPointF(blobX, blobY), radius,
+                radius * (0.6 + stainRng.generateDouble() * 0.4));
+        }
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(
+            QColor(72, 17, 14, 55 + stainRng.bounded(55)));
+        painter.drawPath(splat);
+    }
+
+    painter.restore();
+
+    const QPointF lampPos(0, -halfHeight - wallHeight + 22);
     painter.setPen(QPen(QColor(18, 16, 13), 2));
     painter.drawLine(lampPos, lampPos + QPointF(0, -26));
-    QRadialGradient lampGlow(lampPos, 190);
-    lampGlow.setColorAt(0.0, QColor(236, 176, 104, 90));
-    lampGlow.setColorAt(0.45, QColor(160, 100, 52, 34));
+    QRadialGradient lampGlow(lampPos, 240);
+    lampGlow.setColorAt(0.0, QColor(236, 178, 108, 120));
+    lampGlow.setColorAt(0.45, QColor(168, 108, 56, 48));
     lampGlow.setColorAt(1.0, QColor(0, 0, 0, 0));
     painter.setPen(Qt::NoPen);
     painter.setBrush(lampGlow);
-    painter.drawEllipse(lampPos, 190, 150);
-    painter.setBrush(QColor(236, 182, 112));
-    painter.drawEllipse(lampPos, 6, 8);
+    painter.drawEllipse(lampPos, 240, 190);
+    painter.setBrush(QColor(238, 184, 114));
+    painter.drawEllipse(lampPos, 7, 9);
 
-    painter.setBrush(QColor(72, 54, 40, 120));
-    painter.drawEllipse(QPointF(30, 34), 92, 40);
+    painter.setBrush(QColor(150, 96, 50, 55));
+    painter.drawEllipse(QPointF(0, 28), 150, 68);
+    painter.setBrush(QColor(214, 150, 82, 40));
+    painter.drawEllipse(QPointF(0, 23), 84, 34);
 
-    QPolygonF bed;
-    bed << QPointF(-124, 16) << QPointF(-78, 42)
-        << QPointF(-42, 24) << QPointF(-88, -2);
-    painter.setPen(QPen(QColor(30, 24, 20), 2));
-    painter.setBrush(QColor(62, 46, 39));
-    painter.drawPolygon(bed);
-    painter.setBrush(QColor(82, 66, 54));
-    painter.drawEllipse(QPointF(-112, 14), 14, 8);
-
-    painter.setPen(QPen(QColor(26, 21, 17), 2));
-    painter.setBrush(QColor(56, 44, 32));
-    painter.drawRoundedRect(QRectF(108, -8, 44, 34), 3, 3);
-    painter.setBrush(QColor(44, 35, 26));
-    painter.drawRect(QRectF(112, -18, 36, 12));
-
-    drawSurvivor(painter, QPointF(18, 62), 1.05);
-
-    painter.setPen(QPen(QColor(58, 45, 32), 5, Qt::SolidLine,
-                        Qt::RoundCap));
-    painter.drawLine(QPointF(-92, 92), QPointF(-30, 66));
-    painter.drawLine(QPointF(-88, 70), QPointF(-36, 96));
+    const QPointF doorMid(top.x() + (right.x() - top.x()) * 0.61,
+                          top.y() + (right.y() - top.y()) * 0.61);
+    drawDoorGuard(painter, QPointF(doorMid.x() - 14, doorMid.y() + 4), 1.15);
 
     drawZombieSilhouette(painter, QPointF(-214, 152), 1.05);
     drawZombieSilhouette(painter, QPointF(232, 128), 1.0);
@@ -886,7 +1270,7 @@ void MapView::refreshWorld() {
 }
 
 void MapView::syncWeather() {
-    const bool shouldRain = game_.isRunning() && game_.rainIntensity() > 0.0;
+    const bool shouldRain = game_.en_cours() && game_.intensite_pluie() > 0.0;
     if (shouldRain) {
         if (!rainTimer_->isActive()) {
             rainClock_.restart();
@@ -899,10 +1283,10 @@ void MapView::syncWeather() {
 
 void MapView::buildMapLayer() {
     const int width =
-        (game_.grid().rows() + game_.grid().cols()) * TILE_WIDTH / 2 +
+        (game_.grille().lignes() + game_.grille().colonnes()) * TILE_WIDTH / 2 +
         2 * CACHE_PAD;
     const int height =
-        (game_.grid().rows() + game_.grid().cols()) * TILE_HEIGHT / 2 +
+        (game_.grille().lignes() + game_.grille().colonnes()) * TILE_HEIGHT / 2 +
         TILE_THICKNESS + TOP_HALF_HEIGHT + 1 + 2 * CACHE_PAD;
 
     mapLayer_ = QPixmap(width, height);
@@ -917,22 +1301,22 @@ void MapView::buildMapLayer() {
     fireRow_ = -1;
     fireCol_ = -1;
 
-    for (int sum = 0; sum <= game_.grid().rows() + game_.grid().cols() - 2;
+    for (int sum = 0; sum <= game_.grille().lignes() + game_.grille().colonnes() - 2;
          ++sum) {
-        for (int row = 0; row < game_.grid().rows(); ++row) {
+        for (int row = 0; row < game_.grille().lignes(); ++row) {
             const int col = sum - row;
-            if (col < 0 || col >= game_.grid().cols()) {
+            if (col < 0 || col >= game_.grille().colonnes()) {
                 continue;
             }
 
-            const Cell& cell = game_.grid().cell(row, col);
+            const Cell& cell = game_.grille().cellule(row, col);
             const int cx = originX + (col - row) * TILE_WIDTH / 2;
             const int cy = originY + (col + row) * TILE_HEIGHT / 2;
             const int topY = cy - TILE_THICKNESS;
 
             drawBlock(painter, cx, cy, QColor(58, 72, 54));
 
-            for (const QPoint& spot : game_.blood()) {
+            for (const QPoint& spot : game_.sang()) {
                 if (spot.x() == col && spot.y() == row) {
                     quint32 seed = static_cast<quint32>(row * 131 + col * 977 +
                                                        19);
@@ -941,10 +1325,10 @@ void MapView::buildMapLayer() {
                 }
             }
 
-            if (const Wall* wall = cell.wall()) {
+            if (const Wall* wall = cell.mur()) {
                 drawWall(painter, cx, topY, *wall);
             }
-            if (const Plant* plant = cell.plant()) {
+            if (const Plant* plant = cell.plante()) {
                 drawPlant(painter, cx, topY, *plant);
             }
             if (cell.decoration() == Decoration::Campfire) {
@@ -987,7 +1371,7 @@ void MapView::updatePlacement() {
 }
 
 qreal MapView::daylight() const {
-    const qreal hour = game_.minutesOfDay() / 60.0;
+    const qreal hour = game_.minutes_du_jour() / 60.0;
     if (hour < 5.0) {
         return 0.0;
     }
@@ -1133,8 +1517,8 @@ bool MapView::cellAt(const QPointF& point, int& row, int& col) const {
         const int c = qRound((u + v) / 2.0);
         const int r = qRound((v - u) / 2.0);
 
-        if (r < 0 || c < 0 || r >= game_.grid().rows() ||
-            c >= game_.grid().cols()) {
+        if (r < 0 || c < 0 || r >= game_.grille().lignes() ||
+            c >= game_.grille().colonnes()) {
             continue;
         }
 
@@ -1144,8 +1528,8 @@ bool MapView::cellAt(const QPointF& point, int& row, int& col) const {
             continue;
         }
 
-        const Cell& cell = game_.grid().cell(r, c);
-        if (offset > 0 && !cell.wall() && !cell.plant() &&
+        const Cell& cell = game_.grille().cellule(r, c);
+        if (offset > 0 && !cell.mur() && !cell.plante() &&
             !cell.occupant()) {
             continue;
         }
@@ -1268,7 +1652,7 @@ void MapView::stepRain() {
 }
 
 void MapView::drawRain(QPainter& painter) {
-    const qreal intensity = game_.rainIntensity();
+    const qreal intensity = game_.intensite_pluie();
     if (drops_.isEmpty() || intensity <= 0.0) {
         return;
     }
@@ -1307,37 +1691,46 @@ void MapView::drawTooltip(QPainter& painter) {
         return;
     }
 
-    const Cell& cell = game_.grid().cell(hoverRow_, hoverCol_);
+    const Cell& cell = game_.grille().cellule(hoverRow_, hoverCol_);
     QString title;
     QStringList lines;
 
     if (const Entity* entity = cell.occupant()) {
-        title = entity->typeName();
+        title = entity->nom_type();
         lines << QStringLiteral("HP      %1 / %2")
-                     .arg(entity->health())
-                     .arg(entity->maxHealth())
-              << QStringLiteral("ATTACK  %1").arg(entity->attack())
-              << QStringLiteral("SPEED   %1").arg(entity->speed());
+                     .arg(entity->vie())
+                     .arg(entity->vie_max())
+              << QStringLiteral("ATTACK  %1").arg(entity->attaque())
+              << QStringLiteral("SPEED   %1").arg(entity->vitesse());
         if (const auto* human = dynamic_cast<const Human*>(entity)) {
-            lines << QStringLiteral("HUNGER  %1%%").arg(human->hunger());
-            if (human->contaminationTimer() > 0) {
+            lines << QStringLiteral("HUNGER  %1%%").arg(human->faim());
+            if (human->compteur_infection() > 0) {
                 lines << QStringLiteral("INFECT  %1 / %2")
-                             .arg(human->contaminationTimer())
-                             .arg(Human::InfectionTurns);
+                             .arg(human->compteur_infection())
+                             .arg(Human::duree_infection);
             }
         }
-    } else if (const Wall* wall = cell.wall()) {
-        title = wall->isDestroyed() ? QStringLiteral("Broken Wall")
-                                    : QStringLiteral("Barricade");
+    } else if (const Wall* wall = cell.mur()) {
+        if (wall->est_detruit()) {
+            title = QStringLiteral("Ruined Wall");
+        } else if (wall->est_maison()) {
+            title = QStringLiteral("House");
+        } else if (wall->est_porte() && wall->est_ouverte()) {
+            title = QStringLiteral("Open Door");
+        } else if (wall->est_porte()) {
+            title = QStringLiteral("Door");
+        } else {
+            title = QStringLiteral("Barricade");
+        }
         lines << QStringLiteral("DURAB.  %1 / %2")
-                     .arg(wall->durability())
-                     .arg(wall->maxDurability());
-    } else if (const Plant* plant = cell.plant()) {
+                     .arg(wall->durabilite())
+                     .arg(wall->durabilite_max());
+    } else if (const Plant* plant = cell.plante()) {
         title = QStringLiteral("Food Plant");
         lines << QStringLiteral("GROWTH  %1 / %2")
-                     .arg(plant->growth())
-                     .arg(Plant::MaxGrowth)
-              << QStringLiteral("HARVEST %1").arg(2 + plant->growth());
+                     .arg(plant->croissance())
+                     .arg(Plant::croissance_max)
+              << QStringLiteral("HARVEST %1").arg(2 + plant->croissance());
     } else {
         switch (cell.decoration()) {
         case Decoration::Tree:
@@ -1474,21 +1867,31 @@ void MapView::resizeEvent(QResizeEvent* event) {
 
 MenuOverlay::MenuOverlay(QWidget* parent)
     : QWidget(parent),
+      menuPage_(nullptr),
+      setupPage_(nullptr),
       title_(nullptr),
       subtitle_(nullptr),
       story_(nullptr),
-      hint_(nullptr),
       survivorsSpin_(nullptr),
       zombiesSpin_(nullptr),
+      plantsSpin_(nullptr),
+      defenseSpin_(nullptr),
+      seedEdit_(nullptr),
       startButton_(nullptr),
-      quitButton_(nullptr) {
+      quitButton_(nullptr),
+      launchButton_(nullptr),
+      backButton_(nullptr) {
     setAttribute(Qt::WA_StyledBackground, false);
 
-    auto* outer = new QHBoxLayout(this);
+    auto* stack = new QVBoxLayout(this);
+    stack->setContentsMargins(0, 0, 0, 0);
+
+    menuPage_ = new QWidget(this);
+    auto* outer = new QHBoxLayout(menuPage_);
     outer->setContentsMargins(64, 44, 64, 34);
     outer->setSpacing(40);
 
-    auto* left = new QWidget(this);
+    auto* left = new QWidget(menuPage_);
     auto* column = new QVBoxLayout(left);
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(0);
@@ -1504,82 +1907,31 @@ MenuOverlay::MenuOverlay(QWidget* parent)
     subtitle_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     column->addWidget(subtitle_);
 
-    column->addSpacing(34);
+    column->addStretch(3);
 
     startButton_ = new QPushButton(QStringLiteral("START NEW GAME"), left);
-    startButton_->setObjectName(QStringLiteral("primaryButton"));
+    startButton_->setObjectName(QStringLiteral("menuChoicePrimary"));
     startButton_->setCursor(Qt::PointingHandCursor);
     startButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     column->addWidget(startButton_);
 
-    column->addSpacing(8);
+    column->addSpacing(10);
 
     quitButton_ = new QPushButton(QStringLiteral("EXIT"), left);
-    quitButton_->setObjectName(QStringLiteral("secondaryButton"));
+    quitButton_->setObjectName(QStringLiteral("menuChoice"));
     quitButton_->setCursor(Qt::PointingHandCursor);
     quitButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     column->addWidget(quitButton_);
 
-    column->addSpacing(30);
-
-    auto* settings = new QWidget(left);
-    auto* settingsRow = new QHBoxLayout(settings);
-    settingsRow->setContentsMargins(0, 0, 0, 0);
-    settingsRow->setSpacing(22);
-
-    auto addSpin = [this, settingsRow](const QString& name, int value,
-                                       int minimum, int maximum) {
-        auto* block = new QWidget(this);
-        auto* layout = new QVBoxLayout(block);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(3);
-
-        auto* label = new QLabel(name, block);
-        label->setObjectName(QStringLiteral("spinLabel"));
-        label->setAlignment(Qt::AlignCenter);
-        auto* spin = new QSpinBox(block);
-        spin->setObjectName(QStringLiteral("spawnSpin"));
-        spin->setRange(minimum, maximum);
-        spin->setValue(value);
-        spin->setAlignment(Qt::AlignCenter);
-        spin->setAccelerated(true);
-        spin->setButtonSymbols(QAbstractSpinBox::PlusMinus);
-        layout->addWidget(label);
-        layout->addWidget(spin);
-        settingsRow->addWidget(block);
-        return spin;
-    };
-
-    survivorsSpin_ = addSpin(QStringLiteral("SURVIVORS"), 5, 1, 12);
-    zombiesSpin_ = addSpin(QStringLiteral("ZOMBIES"), 8, 1, 30);
-    settingsRow->addStretch(1);
-
-    column->addWidget(settings);
-    column->addStretch(1);
-
-    hint_ = new QLabel(
-        QStringLiteral(
-            "SPACE  play / pause      1 2 3 4  speed      N  next hour      "
-            "ESC  menu"),
-        left);
-    hint_->setObjectName(QStringLiteral("menuHint"));
-    hint_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    column->addWidget(hint_);
-
-    auto* credit = new QLabel(
-        QStringLiteral("A C++ / Qt simulation  -  hope is a resource too"),
-        left);
-    credit->setObjectName(QStringLiteral("menuCredit"));
-    credit->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    column->addWidget(credit);
+    column->addStretch(2);
 
     outer->addWidget(left, 0);
 
-    auto* gap = new QWidget(this);
+    auto* gap = new QWidget(menuPage_);
     gap->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     outer->addWidget(gap, 1);
 
-    auto* right = new QWidget(this);
+    auto* right = new QWidget(menuPage_);
     auto* rightColumn = new QVBoxLayout(right);
     rightColumn->setContentsMargins(0, 0, 0, 0);
     rightColumn->setSpacing(10);
@@ -1600,8 +1952,10 @@ MenuOverlay::MenuOverlay(QWidget* parent)
             "was gone.\n\n"
             "We reached an old farm with a handful of survivors and raised "
             "the barricades.\n\n"
-            "The rain is heavy, the pantry is thin, and they are coming.\n\n"
-            "Hold the camp for 48 hours.\u201D"),
+            "Stay behind the doors, tend the plants, and keep everyone "
+            "fed.\n\n"
+            "Clear the horde before the pantry runs dry, or the camp "
+            "falls.\u201D"),
         right);
     story_->setObjectName(QStringLiteral("menuStory"));
     story_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -1617,9 +1971,172 @@ MenuOverlay::MenuOverlay(QWidget* parent)
     quoteCredit->setObjectName(QStringLiteral("menuQuoteCredit"));
     quoteCredit->setAlignment(Qt::AlignRight);
     rightColumn->addWidget(quoteCredit);
-    rightColumn->addStretch(2);
+    rightColumn->addStretch(1);
 
     outer->addWidget(right, 0);
+    stack->addWidget(menuPage_);
+
+    setupPage_ = new QWidget(this);
+    auto* setupOuter = new QVBoxLayout(setupPage_);
+    setupOuter->setContentsMargins(80, 40, 80, 40);
+    setupOuter->addStretch(1);
+
+    auto* setupTitle = new QLabel(QStringLiteral("CAMP SETUP"), setupPage_);
+    setupTitle->setObjectName(QStringLiteral("setupTitle"));
+    setupTitle->setAlignment(Qt::AlignCenter);
+    setupOuter->addWidget(setupTitle);
+
+    auto* setupSubtitle = new QLabel(
+        QStringLiteral("Decide what waits behind the barricades."),
+        setupPage_);
+    setupSubtitle->setObjectName(QStringLiteral("setupSubtitle"));
+    setupSubtitle->setAlignment(Qt::AlignCenter);
+    setupOuter->addWidget(setupSubtitle);
+
+    setupOuter->addSpacing(18);
+
+    auto* panel = new QWidget(setupPage_);
+    panel->setObjectName(QStringLiteral("setupPanel"));
+    panel->setAttribute(Qt::WA_StyledBackground, true);
+    panel->setMaximumWidth(760);
+    auto* panelLayout = new QVBoxLayout(panel);
+    panelLayout->setContentsMargins(34, 28, 34, 28);
+    panelLayout->setSpacing(14);
+
+    auto* grid = new QGridLayout();
+    grid->setHorizontalSpacing(18);
+    grid->setVerticalSpacing(10);
+
+    auto addSpin = [&grid](QWidget* host, int row, int col,
+                           const QString& name, int value, int minimum,
+                           int maximum) {
+        auto* label = new QLabel(name, host);
+        label->setObjectName(QStringLiteral("spinLabel"));
+        auto* spin = new QSpinBox(host);
+        spin->setObjectName(QStringLiteral("spawnSpin"));
+        spin->setRange(minimum, maximum);
+        spin->setValue(value);
+        spin->setAlignment(Qt::AlignCenter);
+        spin->setAccelerated(true);
+        spin->setButtonSymbols(QAbstractSpinBox::PlusMinus);
+        grid->addWidget(label, row, col * 2);
+        grid->addWidget(spin, row, col * 2 + 1);
+        return spin;
+    };
+
+    survivorsSpin_ =
+        addSpin(panel, 0, 0, QStringLiteral("SURVIVORS"), 5, 1, 12);
+    zombiesSpin_ =
+        addSpin(panel, 0, 1, QStringLiteral("ZOMBIES"), 8, 1, 30);
+    plantsSpin_ = addSpin(panel, 1, 0, QStringLiteral("PLANTS"), 6, 0, 6);
+    defenseSpin_ =
+        addSpin(panel, 1, 1, QStringLiteral("DEFENSE"), 14, 4, 20);
+    grid->setColumnStretch(1, 1);
+    grid->setColumnStretch(3, 1);
+    panelLayout->addLayout(grid);
+
+    auto makeChecks = [&panel](const QString& title,
+                               const QStringList& names,
+                               QVector<QCheckBox*>& target) {
+        auto* label = new QLabel(title, panel);
+        label->setObjectName(QStringLiteral("setupSection"));
+        auto* row = new QHBoxLayout();
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(18);
+        for (const QString& name : names) {
+            auto* check = new QCheckBox(name, panel);
+            check->setObjectName(QStringLiteral("setupCheck"));
+            check->setChecked(true);
+            target.push_back(check);
+            row->addWidget(check);
+        }
+        row->addStretch(1);
+        return std::make_pair(label, row);
+    };
+
+    auto humanRow = makeChecks(
+        QStringLiteral("SURVIVOR ROLES"),
+        {QStringLiteral("FARMER"), QStringLiteral("DOCTOR"),
+         QStringLiteral("MILITARY"), QStringLiteral("BUILDER")},
+        humanChecks_);
+    panelLayout->addWidget(humanRow.first);
+    panelLayout->addLayout(humanRow.second);
+
+    auto zombieRow = makeChecks(
+        QStringLiteral("ZOMBIE STRAINS"),
+        {QStringLiteral("TANK"), QStringLiteral("RUNNER"),
+         QStringLiteral("EXPLODER")},
+        zombieChecks_);
+    panelLayout->addWidget(zombieRow.first);
+    panelLayout->addLayout(zombieRow.second);
+
+    auto* seedRow = new QHBoxLayout();
+    seedRow->setContentsMargins(0, 0, 0, 0);
+    seedRow->setSpacing(12);
+    auto* seedLabel = new QLabel(QStringLiteral("SEED"), panel);
+    seedLabel->setObjectName(QStringLiteral("spinLabel"));
+    seedEdit_ = new QLineEdit(panel);
+    seedEdit_->setObjectName(QStringLiteral("seedEdit"));
+    seedEdit_->setPlaceholderText(QStringLiteral("random"));
+    seedRow->addWidget(seedLabel);
+    seedRow->addWidget(seedEdit_, 1);
+    auto* randomButton = new QPushButton(QStringLiteral("RANDOM"), panel);
+    randomButton->setObjectName(QStringLiteral("secondaryButton"));
+    randomButton->setCursor(Qt::PointingHandCursor);
+    connect(randomButton, &QPushButton::clicked, this, [this] {
+        seedEdit_->setText(QString::number(
+            QRandomGenerator::global()->generate()));
+    });
+    seedRow->addWidget(randomButton);
+    panelLayout->addSpacing(4);
+    panelLayout->addLayout(seedRow);
+
+    panelLayout->addSpacing(10);
+
+    auto* actions = new QHBoxLayout();
+    actions->setContentsMargins(0, 0, 0, 0);
+    actions->setSpacing(16);
+    backButton_ = new QPushButton(QStringLiteral("BACK"), panel);
+    backButton_->setObjectName(QStringLiteral("secondaryButton"));
+    backButton_->setCursor(Qt::PointingHandCursor);
+    launchButton_ =
+        new QPushButton(QStringLiteral("START THE SIEGE"), panel);
+    launchButton_->setObjectName(QStringLiteral("primaryButton"));
+    launchButton_->setCursor(Qt::PointingHandCursor);
+    actions->addWidget(backButton_, 1);
+    actions->addWidget(launchButton_, 2);
+    panelLayout->addLayout(actions);
+
+    auto* holder = new QWidget(setupPage_);
+    auto* holderRow = new QHBoxLayout(holder);
+    holderRow->setContentsMargins(0, 0, 0, 0);
+    holderRow->addStretch(1);
+    holderRow->addWidget(panel, 0);
+    holderRow->addStretch(1);
+    setupOuter->addWidget(holder);
+    setupOuter->addStretch(1);
+
+    stack->addWidget(setupPage_);
+    setupPage_->hide();
+
+    connect(startButton_, &QPushButton::clicked, this,
+            &MenuOverlay::showSetup);
+    connect(backButton_, &QPushButton::clicked, this,
+            &MenuOverlay::showMenu);
+}
+
+void MenuOverlay::showSetup() {
+    if (seedEdit_->text().trimmed().isEmpty()) {
+        seedEdit_->setText(QString::number(
+            QRandomGenerator::global()->generate()));
+    }
+    menuPage_->hide();
+    setupPage_->show();
+}
+
+void MenuOverlay::showMenu() {
+    setupPage_->hide();
+    menuPage_->show();
 }
 
 int MenuOverlay::survivors() const {
@@ -1628,6 +2145,48 @@ int MenuOverlay::survivors() const {
 
 int MenuOverlay::zombies() const {
     return zombiesSpin_->value();
+}
+
+int MenuOverlay::plants() const {
+    return plantsSpin_->value();
+}
+
+int MenuOverlay::defense() const {
+    return defenseSpin_->value();
+}
+
+unsigned MenuOverlay::seed() const {
+    bool ok = false;
+    const uint value = seedEdit_->text().trimmed().toUInt(&ok);
+    if (!ok || value == 0) {
+        return QRandomGenerator::global()->generate();
+    }
+    return value;
+}
+
+std::vector<HumanType> MenuOverlay::humanTypes() const {
+    static const HumanType all[] = {
+        HumanType::Farmer, HumanType::Doctor,
+        HumanType::Military, HumanType::Builder};
+    std::vector<HumanType> selected;
+    for (int i = 0; i < humanChecks_.size(); ++i) {
+        if (humanChecks_[i]->isChecked()) {
+            selected.push_back(all[i]);
+        }
+    }
+    return selected;
+}
+
+std::vector<ZombieType> MenuOverlay::zombieTypes() const {
+    static const ZombieType all[] = {
+        ZombieType::Tank, ZombieType::Runner, ZombieType::Exploder};
+    std::vector<ZombieType> selected;
+    for (int i = 0; i < zombieChecks_.size(); ++i) {
+        if (zombieChecks_[i]->isChecked()) {
+            selected.push_back(all[i]);
+        }
+    }
+    return selected;
 }
 
 void MenuOverlay::paintEvent(QPaintEvent*) {
@@ -1639,13 +2198,12 @@ void MenuOverlay::paintEvent(QPaintEvent*) {
     bg.setColorAt(1.0, QColor(18, 7, 6));
     painter.fillRect(rect(), bg);
 
-    paintGrime(painter, rect(), 0x51C0DEu, 6);
-
     QRadialGradient gloom(QPointF(width() * 0.5, height() * 0.42),
                           std::max(width(), height()) * 0.7);
     gloom.setColorAt(0.0, QColor(0, 0, 0, 0));
-    gloom.setColorAt(0.7, QColor(0, 0, 0, 40));
-    gloom.setColorAt(1.0, QColor(0, 0, 0, 200));
+    gloom.setColorAt(0.55, QColor(0, 0, 0, 0));
+    gloom.setColorAt(0.8, QColor(0, 0, 0, 30));
+    gloom.setColorAt(1.0, QColor(0, 0, 0, 150));
     painter.fillRect(rect(), gloom);
 
     paintMenuScene(painter, rect());
@@ -1750,6 +2308,7 @@ MainWindow::MainWindow(QWidget* parent)
       page_(nullptr),
       topBar_(nullptr),
       bottomBar_(nullptr),
+      sidePanel_(nullptr),
       statsHost_(nullptr),
       map_(nullptr),
       clock_(nullptr),
@@ -1856,8 +2415,78 @@ void MainWindow::buildGamePage() {
     top->addWidget(clock_, 0, Qt::AlignVCenter);
     root->addWidget(topBar_);
 
-    map_ = new MapView(game_, page_);
-    root->addWidget(map_, 1);
+    auto* middle = new QWidget(page_);
+    auto* middleLayout = new QHBoxLayout(middle);
+    middleLayout->setContentsMargins(0, 0, 0, 0);
+    middleLayout->setSpacing(0);
+
+    map_ = new MapView(game_, middle);
+    middleLayout->addWidget(map_, 1);
+
+    sidePanel_ = new QWidget(middle);
+    sidePanel_->setObjectName(QStringLiteral("sidePanel"));
+    sidePanel_->setAttribute(Qt::WA_StyledBackground, true);
+    auto* side = new QVBoxLayout(sidePanel_);
+
+    auto* panelTitle = new QLabel(QStringLiteral("CONTROLS"), sidePanel_);
+    panelTitle->setObjectName(QStringLiteral("panelTitle"));
+    side->addWidget(panelTitle);
+
+    nextButton_ =
+        new QPushButton(QStringLiteral("NEXT HOUR"), sidePanel_);
+    nextButton_->setObjectName(QStringLiteral("nextButton"));
+    nextButton_->setCursor(Qt::PointingHandCursor);
+    connect(nextButton_, &QPushButton::clicked, this, &MainWindow::advanceTurn);
+    side->addWidget(nextButton_);
+
+    autoButton_ = new QPushButton(QStringLiteral("AUTO"), sidePanel_);
+    autoButton_->setObjectName(QStringLiteral("autoButton"));
+    autoButton_->setCheckable(true);
+    autoButton_->setCursor(Qt::PointingHandCursor);
+    connect(autoButton_, &QPushButton::clicked, this, [this] {
+        autoPlaying_ = autoButton_->isChecked();
+        updateAutoTimer();
+        refreshHud();
+    });
+    side->addWidget(autoButton_);
+
+    auto* speedLabel = new QLabel(QStringLiteral("SPEED"), sidePanel_);
+    speedLabel->setObjectName(QStringLiteral("panelLabel"));
+    side->addWidget(speedLabel);
+
+    auto* speedGrid = new QGridLayout();
+    speedGrid->setContentsMargins(0, 0, 0, 0);
+    speedGrid->setSpacing(6);
+    speedGroup_ = new QButtonGroup(this);
+    speedGroup_->setExclusive(true);
+    for (int i = 1; i <= 4; ++i) {
+        auto* button =
+            new QPushButton(QStringLiteral("x%1").arg(i), sidePanel_);
+        button->setObjectName(QStringLiteral("speedButton"));
+        button->setCheckable(true);
+        button->setCursor(Qt::PointingHandCursor);
+        speedGroup_->addButton(button, i);
+        speedButtons_.push_back(button);
+        speedGrid->addWidget(button, (i - 1) / 2, (i - 1) % 2);
+    }
+    connect(speedGroup_, &QButtonGroup::idClicked, this,
+            [this](int id) { setSpeed(id); });
+    speedButtons_.first()->setChecked(true);
+    side->addLayout(speedGrid);
+
+    side->addStretch(1);
+
+    hintLabel_ = new QLabel(
+        QStringLiteral("SPACE  play/pause\n1-4  speed\nN  next hour\n"
+                       "ESC  menu\nHOVER A TILE  view stats"),
+        sidePanel_);
+    hintLabel_->setObjectName(QStringLiteral("hint"));
+    hintLabel_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    hintLabel_->setWordWrap(true);
+    side->addWidget(hintLabel_);
+
+    middleLayout->addWidget(sidePanel_, 0);
+    root->addWidget(middle, 1);
 
     bottomBar_ = new HudBar(false, page_);
     bottomBar_->setObjectName(QStringLiteral("bottomBar"));
@@ -1900,45 +2529,6 @@ void MainWindow::buildGamePage() {
     eventLabel_->setMinimumWidth(200);
     bottom->addWidget(eventLabel_, 1, Qt::AlignVCenter);
 
-    hintLabel_ = new QLabel(
-        QStringLiteral("SPACE  play/pause    1-4  speed    N  next hour"),
-        bottomBar_);
-    hintLabel_->setObjectName(QStringLiteral("hint"));
-    bottom->addWidget(hintLabel_, 0, Qt::AlignVCenter);
-
-    autoButton_ = new QPushButton(QStringLiteral("AUTO"), bottomBar_);
-    autoButton_->setObjectName(QStringLiteral("autoButton"));
-    autoButton_->setCheckable(true);
-    autoButton_->setCursor(Qt::PointingHandCursor);
-    connect(autoButton_, &QPushButton::clicked, this, [this] {
-        autoPlaying_ = autoButton_->isChecked();
-        updateAutoTimer();
-        refreshHud();
-    });
-    bottom->addWidget(autoButton_, 0, Qt::AlignVCenter);
-
-    speedGroup_ = new QButtonGroup(this);
-    speedGroup_->setExclusive(true);
-    for (int i = 1; i <= 4; ++i) {
-        auto* button = new QPushButton(QStringLiteral("x%1").arg(i), bottomBar_);
-        button->setObjectName(QStringLiteral("speedButton"));
-        button->setCheckable(true);
-        button->setCursor(Qt::PointingHandCursor);
-        speedGroup_->addButton(button, i);
-        speedButtons_.push_back(button);
-        bottom->addWidget(button, 0, Qt::AlignVCenter);
-    }
-    connect(speedGroup_, &QButtonGroup::idClicked, this,
-            [this](int id) { setSpeed(id); });
-    speedButtons_.first()->setChecked(true);
-
-    nextButton_ =
-        new QPushButton(QStringLiteral("NEXT HOUR"), bottomBar_);
-    nextButton_->setObjectName(QStringLiteral("nextButton"));
-    nextButton_->setCursor(Qt::PointingHandCursor);
-    connect(nextButton_, &QPushButton::clicked, this, &MainWindow::advanceTurn);
-    bottom->addWidget(nextButton_, 0, Qt::AlignVCenter);
-
     root->addWidget(bottomBar_);
 }
 
@@ -1947,7 +2537,7 @@ void MainWindow::buildOverlays() {
     end_ = new EndOverlay(page_);
     end_->hide();
 
-    connect(menu_->startButton(), &QPushButton::clicked, this,
+    connect(menu_->launchButton(), &QPushButton::clicked, this,
             &MainWindow::startGame);
     connect(menu_->quitButton(), &QPushButton::clicked, qApp,
             &QCoreApplication::quit);
@@ -1961,11 +2551,12 @@ void MainWindow::buildOverlays() {
 }
 
 void MainWindow::startGame() {
-    game_.start(menu_->survivors(), menu_->zombies(),
-                QRandomGenerator::global()->generate());
+    game_.demarrer(menu_->survivors(), menu_->zombies(), menu_->plants(),
+                menu_->defense(), menu_->humanTypes(), menu_->zombieTypes(),
+                menu_->seed());
 
-    autoPlaying_ = true;
-    autoButton_->setChecked(true);
+    autoPlaying_ = false;
+    autoButton_->setChecked(false);
     setSpeed(1);
 
     menu_->hide();
@@ -1973,7 +2564,7 @@ void MainWindow::startGame() {
 
     map_->refreshWorld();
     map_->syncWeather();
-    clock_->setMinutes(game_.minutesOfDay());
+    clock_->setMinutes(game_.minutes_du_jour());
     refreshHud();
     updateAutoTimer();
     setFocus();
@@ -1988,6 +2579,7 @@ void MainWindow::returnToMenu() {
     autoButton_->setChecked(false);
     updateAutoTimer();
     end_->hide();
+    menu_->showMenu();
     menu_->show();
     menu_->raise();
     refreshHud();
@@ -1995,25 +2587,25 @@ void MainWindow::returnToMenu() {
 }
 
 void MainWindow::advanceTurn() {
-    if (!game_.isRunning()) {
+    if (!game_.en_cours()) {
         return;
     }
-    game_.nextTurn();
+    game_.tour_suivant();
     afterTurn();
 }
 
 void MainWindow::afterTurn() {
     map_->refreshWorld();
     map_->syncWeather();
-    clock_->setMinutes(game_.minutesOfDay());
+    clock_->setMinutes(game_.minutes_du_jour());
     refreshHud();
 
-    if (game_.isOver()) {
+    if (game_.est_termine()) {
         autoPlaying_ = false;
         autoButton_->setChecked(false);
         updateAutoTimer();
-        end_->setResult(game_.humansWon(), game_.turn(),
-                        game_.humanCount(), game_.zombieCount());
+        end_->setResult(game_.humains_gagnent(), game_.tour(),
+                        game_.nombre_humains(), game_.nombre_zombies());
         end_->setGeometry(page_->rect());
         end_->show();
         end_->raise();
@@ -2022,24 +2614,23 @@ void MainWindow::afterTurn() {
 }
 
 void MainWindow::refreshHud() {
-    zombieValue_->setText(QString::number(game_.zombieCount()));
-    humanValue_->setText(QString::number(game_.humanCount()));
-    infectedValue_->setText(QString::number(game_.infectedCount()));
-    foodValue_->setText(QString::number(game_.food()));
+    zombieValue_->setText(QString::number(game_.nombre_zombies()));
+    humanValue_->setText(QString::number(game_.nombre_humains()));
+    infectedValue_->setText(QString::number(game_.nombre_infectes()));
+    foodValue_->setText(QString::number(game_.nourriture()));
     defenseValue_->setText(QString::number(game_.defense()));
 
-    const int minutes = game_.minutesOfDay();
+    const int minutes = game_.minutes_du_jour();
     timeLabel_->setText(QStringLiteral("%1:%2")
                             .arg(minutes / 60, 2, 10, QLatin1Char('0'))
                             .arg(minutes % 60, 2, 10, QLatin1Char('0')));
-    dayLabel_->setText(QStringLiteral("DAY %1  -  %2h LEFT")
-                           .arg(game_.day())
-                           .arg(game_.turnsLeft()));
-    weatherLabel_->setText(game_.weatherName());
-    const int wave = game_.nextWaveIn();
-    waveLabel_->setText(wave > 0 ? QStringLiteral("WAVE IN %1h").arg(wave)
-                                 : QStringLiteral("FINAL HOURS"));
-    eventLabel_->setText(QStringLiteral("REC: ") + game_.lastEvent());
+    dayLabel_->setText(QStringLiteral("DAY %1  -  %2 SURVIVORS")
+                           .arg(game_.jour())
+                           .arg(game_.nombre_humains()));
+    weatherLabel_->setText(game_.nom_meteo());
+    const int wave = game_.prochaine_vague_dans();
+    waveLabel_->setText(QStringLiteral("WAVE IN %1h").arg(wave));
+    eventLabel_->setText(QStringLiteral("REC: ") + game_.dernier_evenement());
 
     autoButton_->setText(autoPlaying_ ? QStringLiteral("PAUSE")
                                       : QStringLiteral("AUTO"));
@@ -2048,7 +2639,7 @@ void MainWindow::refreshHud() {
         speedButtons_[i]->setChecked(i + 1 == speed_);
     }
 
-    const bool running = game_.isRunning();
+    const bool running = game_.en_cours();
     autoButton_->setEnabled(running);
     nextButton_->setEnabled(running);
     for (QPushButton* button : speedButtons_) {
@@ -2060,7 +2651,7 @@ void MainWindow::updateAutoTimer() {
     if (!autoTimer_) {
         return;
     }
-    if (autoPlaying_ && game_.isRunning()) {
+    if (autoPlaying_ && game_.en_cours()) {
         autoTimer_->start(std::max(120, 1000 / speed_));
     } else {
         autoTimer_->stop();
@@ -2068,7 +2659,7 @@ void MainWindow::updateAutoTimer() {
 }
 
 void MainWindow::toggleAutoPlay() {
-    if (!game_.isRunning()) {
+    if (!game_.en_cours()) {
         return;
     }
     autoPlaying_ = !autoPlaying_;
@@ -2097,7 +2688,9 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
         if (isFullScreen()) {
             showMaximized();
-        } else if (!menu_->isVisible() && !end_->isVisible()) {
+        } else if (menu_->isVisible()) {
+            menu_->showMenu();
+        } else if (!end_->isVisible()) {
             returnToMenu();
         }
         return;
@@ -2129,7 +2722,7 @@ void MainWindow::resizeEvent(QResizeEvent* event) {
 }
 
 void MainWindow::applyUiScale() {
-    if (!topBar_ || !bottomBar_ || !clock_ || !hintLabel_) {
+    if (!topBar_ || !bottomBar_ || !sidePanel_ || !clock_ || !hintLabel_) {
         return;
     }
 
@@ -2138,8 +2731,8 @@ void MainWindow::applyUiScale() {
         return qRound(value * scale);
     };
 
-    hintLabel_->setVisible(width() >= px(1560));
-    eventLabel_->setVisible(width() >= px(1240));
+    hintLabel_->setVisible(true);
+    eventLabel_->setVisible(width() >= px(980));
 
     if (std::abs(scale - uiScale_) < 0.01) {
         return;
@@ -2147,18 +2740,24 @@ void MainWindow::applyUiScale() {
     uiScale_ = scale;
 
     topBar_->setFixedHeight(px(110));
-    bottomBar_->setFixedHeight(px(124));
+    bottomBar_->setFixedHeight(px(96));
+    sidePanel_->setFixedWidth(px(196));
     clock_->setFixedSize(px(84), px(84));
 
     topBar_->layout()->setContentsMargins(px(28), px(10), px(26), px(10));
     topBar_->layout()->setSpacing(px(16));
-    bottomBar_->layout()->setContentsMargins(px(28), px(14), px(26), px(14));
+    bottomBar_->layout()->setContentsMargins(px(28), px(10), px(26), px(10));
     bottomBar_->layout()->setSpacing(px(10));
-    statsHost_->layout()->setSpacing(px(30));
+    statsHost_->layout()->setSpacing(px(26));
+    sidePanel_->layout()->setContentsMargins(px(18), px(16), px(18), px(16));
+    sidePanel_->layout()->setSpacing(px(10));
 
-    autoButton_->setFixedHeight(px(38));
-    nextButton_->setFixedHeight(px(38));
-    nextButton_->setMinimumWidth(px(120));
+    autoButton_->setFixedHeight(px(40));
+    for (QPushButton* button : speedButtons_) {
+        button->setFixedHeight(px(34));
+    }
+    nextButton_->setFixedHeight(px(52));
+    nextButton_->setMinimumWidth(0);
 
     const QString body = QStringLiteral("Segoe UI");
     const QString display = displayFont_;
@@ -2198,8 +2797,20 @@ void MainWindow::applyUiScale() {
                .arg(px(26));
     css += QStringLiteral("QLabel#eventLabel { color: #8c8577; font-size: %1px; }")
                .arg(px(12));
-    css += QStringLiteral("QLabel#hint { color: #6f6a5e; font-size: %1px; }")
-               .arg(px(11));
+    css += QStringLiteral("QLabel#hint { color: #8a8474; font-size: %1px; }")
+               .arg(px(13));
+    css += QStringLiteral(
+               "QWidget#sidePanel { background-color: #080b0a;"
+               " border-left: 1px solid #1c2221; }");
+    css += QStringLiteral(
+               "QLabel#panelTitle { color: #b2433a; font-size: %1px;"
+               " font-weight: bold; }")
+               .arg(px(12));
+    css += QStringLiteral(
+               "QLabel#panelLabel { color: #8a8474; font-size: %1px;"
+               " padding-top: %2px; }")
+               .arg(px(10))
+               .arg(px(4));
 
     css += QStringLiteral(
                "QPushButton { background-color: #141718; color: #c2bba9;"
@@ -2234,6 +2845,26 @@ void MainWindow::applyUiScale() {
                "QLabel#menuSubtitle { color: #9e9a88; font-size: %1px; }")
                .arg(px(16));
     css += QStringLiteral(
+               "QPushButton#menuChoicePrimary { background: transparent;"
+               " border: none; text-align: left; color: #d86b5c;"
+               " font-family: \"%1\"; font-size: %2px; font-weight: bold;"
+               " padding: %3px 0; }"
+               "QPushButton#menuChoicePrimary:hover { color: #f08a76; }"
+               "QPushButton#menuChoicePrimary:pressed { color: #b2433a; }")
+               .arg(display)
+               .arg(px(46))
+               .arg(px(10));
+    css += QStringLiteral(
+               "QPushButton#menuChoice { background: transparent;"
+               " border: none; text-align: left; color: #8f8878;"
+               " font-family: \"%1\"; font-size: %2px; font-weight: bold;"
+               " padding: %3px 0; }"
+               "QPushButton#menuChoice:hover { color: #c9c1ae; }"
+               "QPushButton#menuChoice:pressed { color: #b2433a; }")
+               .arg(display)
+               .arg(px(22))
+               .arg(px(4));
+    css += QStringLiteral(
                "QLabel#menuStory { color: #b8b0a0; font-family: \"%1\";"
                " font-size: %2px; }")
                .arg(body)
@@ -2248,8 +2879,39 @@ void MainWindow::applyUiScale() {
                "QLabel#menuHint { color: #7d7566; font-size: %1px; }")
                .arg(px(12));
     css += QStringLiteral(
-               "QLabel#menuCredit { color: #5f5a50; font-size: %1px; }")
-               .arg(px(11));
+        "QWidget#setupPanel { background-color: rgba(11, 14, 13, 235);"
+               " border: 1px solid #2c3230; }");
+    css += QStringLiteral(
+               "QLabel#setupTitle { color: #b2433a; font-family: \"%1\";"
+               " font-size: %2px; font-weight: bold; }")
+               .arg(display)
+               .arg(px(56));
+    css += QStringLiteral(
+               "QLabel#setupSubtitle { color: #9e9a88; font-size: %1px; }")
+               .arg(px(14));
+    css += QStringLiteral(
+               "QLabel#setupSection { color: #b2433a; font-size: %1px;"
+               " font-weight: bold; padding-top: %2px; }")
+               .arg(px(12))
+               .arg(px(6));
+    css += QStringLiteral(
+               "QCheckBox#setupCheck { color: #c2bba9; font-size: %1px;"
+               " spacing: %2px; }"
+               "QCheckBox#setupCheck::indicator { width: %3px; height: %3px;"
+               " border: 1px solid #3a423f; background-color: #101314; }"
+               "QCheckBox#setupCheck::indicator:checked {"
+               " background-color: #7a2f28; border-color: #a8463a; }")
+               .arg(px(13))
+               .arg(px(8))
+               .arg(px(16));
+    css += QStringLiteral(
+               "QLineEdit#seedEdit { background-color: #101314;"
+               " color: #d8d1bf; border: 1px solid #2c3230;"
+               " padding: %1px %2px; font-size: %3px; }"
+               "QLineEdit#seedEdit:focus { border-color: #5a2a26; }")
+               .arg(px(6))
+               .arg(px(8))
+               .arg(px(13));
     css += QStringLiteral(
                "QLabel#resultTitle { color: #b2433a; font-family: \"%1\";"
                " font-size: %2px; font-weight: bold; }")
@@ -2272,12 +2934,13 @@ void MainWindow::applyUiScale() {
                "QSpinBox#spawnSpin { background-color: #101314;"
                " color: #d8d1bf; border: 1px solid #2c3230;"
                " padding: %1px %2px; font-size: %3px; font-weight: bold;"
-               " min-width: %4px; }"
+               " min-width: %4px; min-height: %5px; }"
                "QSpinBox#spawnSpin:focus { border-color: #5a2a26; }")
                .arg(px(2))
                .arg(px(4))
                .arg(px(14))
-               .arg(px(56));
+               .arg(px(40))
+               .arg(px(26));
     css += QStringLiteral(
                "QPushButton#primaryButton { background-color: #2a1210;"
                " color: #e2c7aa; border: 1px solid #79322b;"
