@@ -1,5 +1,10 @@
+#include <map>
 #include <memory>
 
+#include <QColor>
+#include <QString>
+
+//un zombie utilise les actions communes definies dans entity
 class Zombie : public Entity
 {
 public:
@@ -8,7 +13,6 @@ public:
     ZombieType type_zombie() const { return type_zombie_actuel; }
     QString nom_type() const override;
     QColor couleur() const override;
-    Sprite sprite() const override;
     void agir(Game& jeu) override;
 
 private:
@@ -18,6 +22,7 @@ private:
     ZombieType type_zombie_actuel;
 };
 
+//les differents types de zombies disponibles dans le jeu
 enum class ZombieType : int
 {
     Tank,
@@ -25,109 +30,77 @@ enum class ZombieType : int
     Exploder
 };
 
-struct ZombieStats
+//regroupe les statistiques et l'apparence d'un type de zombie
+struct ZombieInfo
 {
     int vie_max;
     int attaque;
     int vitesse;
+    QString nom;
+    QColor couleur;
 };
 
-ZombieStats stats_zombie(ZombieType type)
+//les caracteristiques des zombies sont regroupees par type
+const std::map<ZombieType, ZombieInfo> infos_zombies = {
+    {ZombieType::Tank,
+     {22, 3, 1, QStringLiteral("Tank Zombie"), QColor(66, 78, 62)}},
+    {ZombieType::Runner,
+     {8, 2, 2, QStringLiteral("Runner Zombie"), QColor(110, 116, 88)}},
+    {ZombieType::Exploder,
+     {11, 2, 1, QStringLiteral("Exploder Zombie"), QColor(92, 104, 74)}}};
+
+//cherche les statistiques du type demande
+const ZombieInfo& info_zombie(ZombieType type)
 {
-    switch (type)
+    const auto info = infos_zombies.find(type);
+
+    if (info != infos_zombies.end())
     {
-    case ZombieType::Tank:
-        return {22, 3, 1};
-    case ZombieType::Runner:
-        return {8, 2, 2};
-    case ZombieType::Exploder:
-        return {11, 2, 1};
+        return info->second;
     }
 
-    return {8, 2, 1};
+    //retourne un zombie standard si le type n'est pas reconnu
+    static const ZombieInfo inconnu = {
+        8, 2, 1, QStringLiteral("Zombie"), QColor(90, 100, 78)};
+    return inconnu;
 }
 
-QString nom_type_zombie(ZombieType type)
-{
-    switch (type)
-    {
-    case ZombieType::Tank:
-        return QStringLiteral("Tank Zombie");
-    case ZombieType::Runner:
-        return QStringLiteral("Runner Zombie");
-    case ZombieType::Exploder:
-        return QStringLiteral("Exploder Zombie");
-    }
-
-    return QStringLiteral("Zombie");
-}
-
-QColor couleur_type_zombie(ZombieType type)
-{
-    switch (type)
-    {
-    case ZombieType::Tank:
-        return QColor(66, 78, 62);
-    case ZombieType::Runner:
-        return QColor(110, 116, 88);
-    case ZombieType::Exploder:
-        return QColor(92, 104, 74);
-    }
-
-    return QColor(90, 100, 78);
-}
-
-Sprite sprite_type_zombie(ZombieType type)
-{
-    switch (type)
-    {
-    case ZombieType::Tank:
-        return Sprite::Tank;
-    case ZombieType::Runner:
-        return Sprite::Runner;
-    case ZombieType::Exploder:
-        return Sprite::Exploder;
-    }
-
-    return Sprite::Tank;
-}
-
+//cree un zombie avec les valeurs de son type
 Zombie::Zombie(int numero, ZombieType type, int ligne, int colonne)
     : Entity(numero,
-             stats_zombie(type).vie_max,
-             stats_zombie(type).attaque,
-             stats_zombie(type).vitesse,
+             info_zombie(type).vie_max,
+             info_zombie(type).attaque,
+             info_zombie(type).vitesse,
              ligne,
              colonne),
       type_zombie_actuel(type)
 {
 }
 
+//renvoie le nom, la couleur et le sprite du type actuel
 QString Zombie::nom_type() const
 {
-    return nom_type_zombie(type_zombie_actuel);
+    return info_zombie(type_zombie_actuel).nom;
 }
 
 QColor Zombie::couleur() const
 {
-    return couleur_type_zombie(type_zombie_actuel);
+    return info_zombie(type_zombie_actuel).couleur;
 }
 
-Sprite Zombie::sprite() const
-{
-    return sprite_type_zombie(type_zombie_actuel);
-}
-
+//retourne le nombre de cases que le zombie peut parcourir par tour
 int Zombie::nombre_pas() const
 {
-    return type_zombie_actuel == ZombieType::Runner ? 2 : 1;
+    return info_zombie(type_zombie_actuel).vitesse;
 }
 
+//cherche un mur voisin et lui inflige les degats du zombie
 void Zombie::attaquer_obstacle(Game& jeu)
 {
     const int decalage_ligne[4] = {-1, 1, 0, 0};
     const int decalage_colonne[4] = {0, 0, -1, 1};
 
+    //frappe le premier mur voisin qui bloque son chemin
     for (int direction = 0; direction < 4; direction++)
     {
         const int ligne_voisine = ligne() + decalage_ligne[direction];
@@ -155,6 +128,7 @@ void Zombie::attaquer_obstacle(Game& jeu)
     }
 }
 
+//fait agir le zombie pendant un tour
 void Zombie::agir(Game& jeu)
 {
     if (!est_vivant())
@@ -162,6 +136,7 @@ void Zombie::agir(Game& jeu)
         return;
     }
 
+    //le zombie poursuit le survivant vivant le plus proche
     Human* cible = jeu.survivant_le_plus_proche(*this);
 
     if (cible == nullptr)
@@ -170,6 +145,7 @@ void Zombie::agir(Game& jeu)
         return;
     }
 
+    //l'exploder explose au lieu de poursuivre jusqu'au contact
     if (type_zombie_actuel == ZombieType::Exploder &&
         Game::distance_manhattan(*this, *cible) <= 1)
     {
@@ -177,6 +153,7 @@ void Zombie::agir(Game& jeu)
         return;
     }
 
+    //la vitesse determine le nombre de cases parcourues ce tour
     for (int pas = 0; pas < nombre_pas(); pas++)
     {
         if (!cible->est_vivant() ||
@@ -194,6 +171,7 @@ void Zombie::agir(Game& jeu)
         break;
     }
 
+    //attaque la cible si le deplacement l'a amene juste a cote
     if (cible->est_vivant() &&
         Game::distance_manhattan(*this, *cible) <= 1)
     {
@@ -204,6 +182,7 @@ void Zombie::agir(Game& jeu)
     }
 }
 
+//fabrique un zombie gere par un pointeur unique
 std::unique_ptr<Zombie> creer_zombie(int numero, ZombieType type, int ligne,
                                      int colonne)
 {

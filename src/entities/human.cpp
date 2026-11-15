@@ -1,20 +1,13 @@
 #include <algorithm>
+#include <map>
 #include <memory>
+
+#include <QColor>
+#include <QString>
 
 class Game;
 
-enum class Sprite : int
-{
-    Farmer,
-    Doctor,
-    Military,
-    Builder,
-    Child,
-    Tank,
-    Runner,
-    Exploder
-};
-
+//les metiers donnent des actions et des statistiques differentes
 enum class HumanType : int
 {
     Farmer,
@@ -24,6 +17,7 @@ enum class HumanType : int
     Child
 };
 
+//indique si un humain est sain, infecte ou transforme
 enum class Status : int
 {
     Healthy,
@@ -31,6 +25,7 @@ enum class Status : int
     Transformed
 };
 
+//classe de base commune aux survivants et aux zombies
 class Entity
 {
 public:
@@ -54,7 +49,6 @@ public:
 
     virtual QString nom_type() const = 0;
     virtual QColor couleur() const = 0;
-    virtual Sprite sprite() const = 0;
     virtual void agir(Game& jeu) = 0;
 
     void prendre_degats(int degats);
@@ -76,6 +70,7 @@ private:
     int position_colonne;
 };
 
+//un humain garde son metier, sa faim, son age et son infection
 class Human : public Entity
 {
 public:
@@ -85,7 +80,6 @@ public:
     void changer_type(HumanType type);
     QString nom_type() const override;
     QColor couleur() const override;
-    Sprite sprite() const override;
     void agir(Game& jeu) override;
 
     Status etat() const { return etat_sante; }
@@ -108,6 +102,7 @@ public:
 
     static constexpr int duree_infection = 4;
     static constexpr int age_adulte = 6;
+    static constexpr int portee_tir = 4;
 
 private:
     HumanType type_humain_actuel;
@@ -118,92 +113,49 @@ private:
     int recharge = 0;
 };
 
-struct HumanStats
+//regroupe les statistiques et l'apparence d'un metier
+struct HumanInfo
 {
     int vie_max;
     int attaque;
     int vitesse;
+    QString nom;
+    QColor couleur;
 };
 
-HumanStats stats_humain(HumanType type)
+//les caracteristiques de chaque metier sont regroupees ici
+const std::map<HumanType, HumanInfo> infos_humains = {
+    {HumanType::Farmer,
+     {14, 4, 1, QStringLiteral("Farmer"), QColor(122, 104, 80)}},
+    {HumanType::Doctor,
+     {12, 3, 1, QStringLiteral("Doctor"), QColor(150, 148, 140)}},
+    {HumanType::Military,
+     {20, 11, 1, QStringLiteral("Military"), QColor(84, 92, 66)}},
+    {HumanType::Builder,
+     {16, 5, 1, QStringLiteral("Builder"), QColor(130, 92, 56)}},
+    {HumanType::Child,
+     {6, 1, 1, QStringLiteral("Child"), QColor(170, 140, 104)}}};
+
+//cherche les statistiques du metier demande
+const HumanInfo& info_humain(HumanType type)
 {
-    switch (type)
+    const auto info = infos_humains.find(type);
+
+    if (info != infos_humains.end())
     {
-    case HumanType::Farmer:
-        return {14, 4, 1};
-    case HumanType::Doctor:
-        return {12, 3, 1};
-    case HumanType::Military:
-        return {20, 11, 1};
-    case HumanType::Builder:
-        return {16, 5, 1};
-    case HumanType::Child:
-        return {6, 1, 1};
+        return info->second;
     }
 
-    return {10, 3, 1};
-}
-
-QString nom_type_humain(HumanType type)
-{
-    switch (type)
-    {
-    case HumanType::Farmer:
-        return QStringLiteral("Farmer");
-    case HumanType::Doctor:
-        return QStringLiteral("Doctor");
-    case HumanType::Military:
-        return QStringLiteral("Military");
-    case HumanType::Builder:
-        return QStringLiteral("Builder");
-    case HumanType::Child:
-        return QStringLiteral("Child");
-    }
-
-    return QStringLiteral("Survivor");
-}
-
-QColor couleur_type_humain(HumanType type)
-{
-    switch (type)
-    {
-    case HumanType::Farmer:
-        return QColor(122, 104, 80);
-    case HumanType::Doctor:
-        return QColor(150, 148, 140);
-    case HumanType::Military:
-        return QColor(84, 92, 66);
-    case HumanType::Builder:
-        return QColor(130, 92, 56);
-    case HumanType::Child:
-        return QColor(170, 140, 104);
-    }
-
-    return QColor(120, 110, 90);
-}
-
-Sprite sprite_type_humain(HumanType type)
-{
-    switch (type)
-    {
-    case HumanType::Farmer:
-        return Sprite::Farmer;
-    case HumanType::Doctor:
-        return Sprite::Doctor;
-    case HumanType::Military:
-        return Sprite::Military;
-    case HumanType::Builder:
-        return Sprite::Builder;
-    case HumanType::Child:
-        return Sprite::Child;
-    }
-
-    return Sprite::Farmer;
+    //utilise des valeurs simples si le metier n'est pas reconnu
+    static const HumanInfo inconnu = {
+        10, 3, 1, QStringLiteral("Survivor"), QColor(120, 110, 90)};
+    return inconnu;
 }
 
 namespace
 {
 
+//renvoie -1, 0 ou 1 selon le sens du deplacement
 int signe(int valeur)
 {
     return (valeur > 0) - (valeur < 0);
@@ -211,6 +163,7 @@ int signe(int valeur)
 
 }
 
+//initialise les points de vie et la position de l'entite
 Entity::Entity(int numero, int vie_max, int attaque, int vitesse,
                int ligne, int colonne)
     : numero(numero),
@@ -223,22 +176,26 @@ Entity::Entity(int numero, int vie_max, int attaque, int vitesse,
 {
 }
 
+//met a jour la position en memoire
 void Entity::changer_position(int ligne, int colonne)
 {
     position_ligne = ligne;
     position_colonne = colonne;
 }
 
+//retire des points de vie sans passer sous zero
 void Entity::prendre_degats(int degats)
 {
     points_de_vie = std::max(0, points_de_vie - degats);
 }
 
+//rend des points de vie sans depasser le maximum
 void Entity::soigner(int soin)
 {
     points_de_vie = std::min(points_de_vie_max, points_de_vie + soin);
 }
 
+//remplace les statistiques quand un humain change de metier
 void Entity::changer_stats(int vie_max, int attaque, int vitesse)
 {
     points_de_vie_max = vie_max;
@@ -247,6 +204,7 @@ void Entity::changer_stats(int vie_max, int attaque, int vitesse)
     pas = vitesse;
 }
 
+//deplace l'entite seulement si la case d'arrivee est libre
 bool Entity::essayer_deplacement(Game& jeu, int delta_ligne,
                                  int delta_colonne)
 {
@@ -280,6 +238,7 @@ bool Entity::essayer_deplacement(Game& jeu, int delta_ligne,
     return true;
 }
 
+//essaie de rejoindre la cible en se deplacant sur une seule case
 bool Entity::avancer_vers(Game& jeu, int ligne_cible,
                           int colonne_cible)
 {
@@ -301,6 +260,7 @@ bool Entity::avancer_vers(Game& jeu, int ligne_cible,
     return false;
 }
 
+//choisit au hasard une case libre autour de l'entite
 bool Entity::errer(Game& jeu)
 {
     const int decalage_ligne[4] = {-1, 1, 0, 0};
@@ -333,11 +293,12 @@ bool Entity::errer(Game& jeu)
                                decalage_colonne[direction]);
 }
 
+//cree un survivant avec les statistiques de son metier
 Human::Human(int numero, HumanType type, int ligne, int colonne)
     : Entity(numero,
-             stats_humain(type).vie_max,
-             stats_humain(type).attaque,
-             stats_humain(type).vitesse,
+             info_humain(type).vie_max,
+             info_humain(type).attaque,
+             info_humain(type).vitesse,
              ligne,
              colonne),
       type_humain_actuel(type),
@@ -345,29 +306,27 @@ Human::Human(int numero, HumanType type, int ligne, int colonne)
 {
 }
 
+//change le metier et remet ses statistiques a leur valeur de base
 void Human::changer_type(HumanType type)
 {
     type_humain_actuel = type;
-    changer_stats(stats_humain(type).vie_max,
-                  stats_humain(type).attaque,
-                  stats_humain(type).vitesse);
+    changer_stats(info_humain(type).vie_max,
+                  info_humain(type).attaque,
+                  info_humain(type).vitesse);
 }
 
+//fournit le nom, la couleur et le sprite du metier actuel
 QString Human::nom_type() const
 {
-    return nom_type_humain(type_humain_actuel);
+    return info_humain(type_humain_actuel).nom;
 }
 
 QColor Human::couleur() const
 {
-    return couleur_type_humain(type_humain_actuel);
+    return info_humain(type_humain_actuel).couleur;
 }
 
-Sprite Human::sprite() const
-{
-    return sprite_type_humain(type_humain_actuel);
-}
-
+//choisit l'action du survivant pour ce tour
 void Human::agir(Game& jeu)
 {
     if (!est_vivant())
@@ -375,6 +334,7 @@ void Human::agir(Game& jeu)
         return;
     }
 
+    //un zombie voisin passe avant le travail du metier
     if (Zombie* menace = jeu.zombie_a_cote(*this))
     {
         jeu.blesser_zombie(*menace, attaque());
@@ -382,9 +342,11 @@ void Human::agir(Game& jeu)
         return;
     }
 
+    //chaque metier cherche ensuite une cible liee a son role
     switch (type_humain_actuel)
     {
     case HumanType::Child:
+        //l'enfant se deplace parfois sans objectif precis
         if (jeu.entier_aleatoire(0, 99) < 40)
         {
             errer(jeu);
@@ -393,7 +355,9 @@ void Human::agir(Game& jeu)
 
     case HumanType::Farmer:
     {
+        //le fermier cherche une plante mure, d'abord a cote puis plus loin
         Plant* plante = jeu.plante_mure_a_cote(*this);
+        const bool plante_voisine = plante != nullptr;
 
         if (plante == nullptr)
         {
@@ -406,7 +370,7 @@ void Human::agir(Game& jeu)
             return;
         }
 
-        if (jeu.plante_mure_a_cote(*this) != nullptr)
+        if (plante_voisine)
         {
             jeu.ajouter_nourriture(plante->recolter());
             jeu.noter_evenement(
@@ -424,6 +388,7 @@ void Human::agir(Game& jeu)
 
     case HumanType::Doctor:
     {
+        //le docteur soigne un infecte voisin ou se rapproche du plus proche
         Human* patient = jeu.infecte_a_cote(*this);
 
         if (patient != nullptr)
@@ -436,14 +401,8 @@ void Human::agir(Game& jeu)
 
         patient = jeu.infecte_le_plus_proche(*this);
 
-        if (patient != nullptr &&
+        if (patient == nullptr ||
             !avancer_vers(jeu, patient->ligne(), patient->colonne()))
-        {
-            errer(jeu);
-            return;
-        }
-
-        if (patient == nullptr)
         {
             errer(jeu);
         }
@@ -453,12 +412,13 @@ void Human::agir(Game& jeu)
 
     case HumanType::Military:
     {
+        //le militaire tire sur le zombie le plus proche dans sa portee
         if (recharge > 0)
         {
             recharge--;
         }
 
-        Zombie* cible = jeu.zombie_le_plus_proche(*this, 4);
+        Zombie* cible = jeu.zombie_le_plus_proche(*this, portee_tir);
 
         if (cible == nullptr)
         {
@@ -479,11 +439,12 @@ void Human::agir(Game& jeu)
 
     case HumanType::Builder:
     {
+        //le constructeur repare un mur abime avant de chercher plus loin
         Wall* mur = jeu.mur_abime_a_cote(*this);
 
         if (mur != nullptr)
         {
-            mur->reparer(4);
+            mur->reparer(3);
             jeu.noter_evenement(
                 QStringLiteral("A builder repaired a wall."));
             return;
@@ -491,13 +452,8 @@ void Human::agir(Game& jeu)
 
         mur = jeu.mur_abime_le_plus_proche(*this, 8);
 
-        if (mur == nullptr)
-        {
-            errer(jeu);
-            return;
-        }
-
-        if (!avancer_vers(jeu, mur->ligne(), mur->colonne()))
+        if (mur == nullptr ||
+            !avancer_vers(jeu, mur->ligne(), mur->colonne()))
         {
             errer(jeu);
         }
@@ -507,6 +463,7 @@ void Human::agir(Game& jeu)
     }
 }
 
+//ajoute de l'infection et change l'etat de sante
 void Human::infecter(int quantite)
 {
     if (etat_sante == Status::Transformed)
@@ -522,6 +479,7 @@ void Human::infecter(int quantite)
     }
 }
 
+//soigne l'infection et rend un peu de vie
 void Human::guerir()
 {
     infection = 0;
@@ -531,6 +489,7 @@ void Human::guerir()
 
 void Human::reduire_faim()
 {
+    //la faim baisse a chaque tour et cause des degats quand elle atteint zero
     niveau_faim = std::max(0, niveau_faim - 15);
 
     if (niveau_faim == 0)
@@ -541,9 +500,11 @@ void Human::reduire_faim()
 
 void Human::manger()
 {
+    //la faim ne peut pas depasser son maximum
     niveau_faim = std::min(100, niveau_faim + 45);
 }
 
+//fait avancer l'age d'un enfant d'un tour
 void Human::vieillir()
 {
     if (type_humain_actuel != HumanType::Child)
@@ -554,6 +515,7 @@ void Human::vieillir()
     nombre_tours_vecu++;
 }
 
+//cherche une case voisine qui augmente la distance avec les zombies
 bool Human::fuir_le_danger(Game& jeu)
 {
     const int decalage_ligne[4] = {-1, 1, 0, 0};
@@ -563,6 +525,7 @@ bool Human::fuir_le_danger(Game& jeu)
     int meilleure_colonne = -1;
     int meilleure_distance = -1;
 
+    //choisit la case libre la plus eloignee des zombies
     for (int direction = 0; direction < 4; direction++)
     {
         const int ligne = this->ligne() + decalage_ligne[direction];
@@ -595,6 +558,7 @@ bool Human::fuir_le_danger(Game& jeu)
                                meilleure_colonne - colonne());
 }
 
+//fabrique un humain gere par un pointeur unique
 std::unique_ptr<Human> creer_humain(int numero, HumanType type, int ligne,
                                     int colonne)
 {

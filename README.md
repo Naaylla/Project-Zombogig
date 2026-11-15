@@ -1,143 +1,120 @@
 # ZomboGIG
 
-Jeu de survie isométrique contre des zombies, réalisé avec Qt 6 Widgets. Tout
-est dessiné par Qt : aucun asset externe, aucune bibliothèque 3D.
+ZomboGIG est un jeu de survie contre des zombies. Les survivants et les zombies
+agissent automatiquement à chaque tour : gérez les ressources, protégez la base
+et survivez aux vagues.
 
-## Le jeu
+Le projet est inspiré du jeu *Project Zomboid* et de son thème de survie face
+aux zombies.
 
-- Carte isométrique de 12 x 12 avec un camp entouré de murs, deux portes, deux
-  maisons, un feu de camp, des plants de nourriture et quelques décorations.
-- Un tour = une heure, la partie commence à 07:00 sous une pluie légère. Il n'y
-  a pas de limite de temps : tant qu'il reste des survivants et des zombies, la
-  partie continue.
-- Le menu principal permet de choisir : le nombre de survivants (1 à 12), le
-  nombre de zombies (1 à 30), les plants de départ (0 à 6), la solidité des murs
-  (4 à 20), les métiers humains autorisés, les types de zombies autorisés et une
-  graine aléatoire.
-- Les humains (Farmer, Doctor, Military, Builder) et les zombies (Tank, Runner,
-  Exploder) agissent automatiquement à chaque tour. Les humains mangent,
-  récoltent, soignent, réparent et combattent ; les zombies poursuivent,
-  frappent les murs, les portes et les maisons, et explosent.
-- Les portes restent fermées pendant l'attaque des zombies. Avant d'agir, les
-  survivants ouvrent les portes adjacentes pour circuler ; les zombies peuvent
-  traverser une porte ouverte ou la briser.
-- Une nouvelle vague arrive toutes les 8 heures et devient plus nombreuse avec
-  le temps.
-- Les plants repoussent chaque tour (la pluie double la croissance). La faim
-  baisse de 15 points par tour : un survivant affamé (50 ou moins) prend une
-  unité dans la réserve commune et remonte à 100.
-- Tous les 6 tours, si le camp compte au moins 3 survivants, un enfant rejoint
-  le groupe ou un survivant adulte change de métier. Un enfant devient adulte au
-  bout de 6 tours.
-- Un survivant infecté se transforme en zombie au bout de 4 tours s'il n'est pas
-  soigné par un docteur.
+## Comment jouer
 
-## Conditions de fin de partie
+- La partie commence à 07 h. Un tour représente une heure.
+- La carte fait 12 x 12 cases. La base a un périmètre rectangulaire compact
+  avec deux portes et deux maisons à l'intérieur. Les survivants peuvent sortir
+  par les portes pour rejoindre les zombies ou explorer la carte.
+- Les portes s'ouvrent lorsqu'un survivant se trouve à côté. Elles se referment
+  au tour suivant ; les zombies peuvent les attaquer.
+- Le nombre de zombies choisi dans le menu apparait au debut de la partie.
+  Ensuite, une vague arrive sur les bords de la carte toutes les 8 heures :
+  les deux premieres ajoutent 3 zombies chacune, puis chaque vague en ajoute
+  5. Les types de zombies viennent de la selection du menu.
+- Les plantes poussent à chaque tour, plus vite quand il pleut. Les fermiers
+  récoltent les plantes mûres et ajoutent la nourriture à la réserve commune.
+- Certains plants se trouvent à l'extérieur de la base : les fermiers peuvent
+  passer par les portes pour aller les récolter.
+- Des colis de ravitaillement contenant 3 à 5 rations tombent parfois dehors.
+  Un survivant les ramasse automatiquement en marchant sur la case.
+- Les zombies apparaissent à l'extérieur du périmètre, pas au milieu de la base.
+- Un zombie éliminé laisse un cadavre visible pendant 6 tours ; il s'efface
+  progressivement.
+- La faim diminue au fil des tours. Les survivants mangent dans la réserve ;
+  sans nourriture, la partie est perdue.
+- Les zombies peuvent blesser et infecter les survivants. Sans soin, une
+  infection se transforme en zombie après 4 tours.
+- Tous les 6 tours, si au moins 3 survivants sont en vie, un enfant rejoint le
+  groupe ou un adulte change de métier. Un enfant devient adulte après 6 tours.
 
-La partie s'arrête à la fin d'un tour, dans l'un de ces trois cas :
+## Rôle des personnages
 
-1. **Défaite — plus aucun survivant.** Dès que la liste des survivants est vide
-   (tués par les zombies ou transformés après infection), l'état passe à
-   `GameOver` avec `victoire_humains = false`. Le message affiché est
-   « THE CAMP HAS FALLEN ».
-2. **Victoire — plus aucun zombie.** Si au moins un survivant est encore en vie
-   et que la horde est vide, l'état passe à `GameOver` avec
-   `victoire_humains = true`. Le message affiché est « THE HORDE IS GONE ».
-3. **Défaite — réserve de nourriture vide.** Si `stock_nourriture` tombe à 0,
-   c'est la famine et la partie est perdue.
+### Survivants
 
-Points importants :
+- **Fermier** : récolte les plantes mûres pour nourrir le groupe.
+- **Docteur** : soigne les survivants infectés.
+- **Militaire** : tire sur les zombies à 4 cases maximum et les poursuit,
+  y compris hors de la base. Survoler un militaire met en évidence chaque case
+  de sa zone de tir.
+- **Constructeur** : répare les murs endommagés ou détruits. Il restaure
+  3 points de durabilité par tour, ce qui lui demande plusieurs tours pour
+  remettre un mur en état.
+- **Enfant** : se déplace dans les environs et peut devenir adulte.
 
-- La défaite par survivants est vérifiée avant la victoire, puis la famine.
-- Les survivants infectés mais pas encore transformés comptent encore comme
-  vivants ; ils ne sont retirés qu'à leur transformation (4 tours d'infection).
-- Des vagues continuent d'arriver tant que la partie dure : pour gagner, il faut
-  détruire la horde avant la vague suivante.
+Les survivants agissent seuls. Ils attaquent un zombie voisin ou fuient le
+danger avant d'effectuer leur activité habituelle.
+
+### Zombies
+
+- **Tank** : résistant, mais lent.
+- **Runner** : rapide et se déplace de deux cases par tour.
+- **Exploder** : explose lorsqu'il atteint un survivant proche.
+
+Les zombies poursuivent les survivants, attaquent les obstacles qui bloquent
+leur passage et peuvent infecter leurs victimes.
+
+## Fin de partie
+
+- **Défaite** : tous les survivants sont morts ou transformés, ou la réserve de
+  nourriture est épuisée.
+- **Victoire** : au moins un survivant est encore en vie et il n'y a plus de
+  zombies.
+
+Les vagues continuent tant que la partie n'est pas terminée.
+
+## Interface et survol
+
+L'interface affiche l'heure et le jour, le nombre de survivants et d'infectés,
+la nourriture, la défense, le temps avant la prochaine vague et le dernier
+événement du jeu.
+
+Survoler une case de la carte affiche ses informations : par exemple, les points
+de vie d'un personnage, la solidité d'un mur, la croissance d'une plante, la
+quantité de nourriture d'un colis ou le temps restant avant la disparition
+d'un cadavre. Survoler un militaire met en surbrillance les cases qu'il peut
+atteindre avec son tir, jusqu'à 4 cases de distance.
 
 ## Contrôles
 
-- `Espace` — lancer / mettre en pause le déroulement automatique
-- `N` ou `→` — avancer d'une heure
-- `1` `2` `3` `4` — vitesse du déroulement automatique
-- `Échap` — retour au menu
-- `F11` — plein écran
-- **Survoler une case de la carte affiche ses statistiques** (type, points de
-  vie, murs, plants, décorations).
+- `Espace` : lancer ou mettre en pause le déroulement automatique
+- `N` ou `→` : avancer d'un tour
+- `1`, `2`, `3`, `4` : régler la vitesse du déroulement automatique
+- `Échap` : retourner au menu
+- `F11` : activer ou quitter le plein écran
+- Survoler une case : afficher ses informations
 
-## Interface
-
-- Pluie animée tant que le temps est pluvieux, puis éclaircie.
-- Éclairage jour/nuit, lueur du feu de camp, brouillard dérivant et taches de
-  sang.
-- HUD et menu au style « survie » usé, avec un court texte d'introduction.
-- Interface adaptative : la fenêtre s'ouvre maximisée et le HUD suit la hauteur.
-- Police optionnelle : placez un fichier `.ttf`/`.otf` dans un dossier `fonts/`
-  à côté de l'exécutable (ou à la racine du projet), il sera chargé
-  automatiquement.
-
-## Organisation du projet
-
-Le code est rangé par rôle pour rester simple à lire et à présenter. Il n'y a
-pas de fichiers d'en-tête : chaque module contient ses déclarations puis son
-code, et `main.cpp` les assemble dans l'ordre.
-
-- `src/main.cpp` — le cœur du jeu : la classe `Game`, les énumérations
-  `GameState` et `Weather`, les tours, les portes, les vagues, la météo, les
-  apparitions, l'accueil de nouveaux survivants et la fin de partie.
-- `src/logic/world.cpp` — le plateau : `Wall` (mur, porte ou maison), `Plant`,
-  `Cell` et `Grid` (occupation des cases, murs, plantes, décorations).
-- `src/entities/human.cpp` — `Entity` (base commune), `Human`, l'énumération
-  `HumanType` (`Farmer`, `Doctor`, `Military`, `Builder`, `Child`), leurs
-  statistiques, leurs capacités et les déplacements communs.
-- `src/entities/zombie.cpp` — `Zombie`, l'énumération `ZombieType`, les
-  statistiques et capacités de `Tank`, `Runner` et `Exploder`.
-- `src/ui/ui.cpp` — les widgets, le rendu de la carte, le menu et le HUD.
-- Fabriques : `creer_humain` et `creer_zombie`.
-
-Classes du modèle : `Game`, `GameState`, `Grid`, `Cell`, `Entity` (abstraite),
-`Human`, `Zombie`, `Plant`, `Wall`, `Status`.
-
-## À propos du code et de l'IA
-
-L'interface et le design visuel dans `src/ui/` ont été réalisés avec l'aide d'un
-assistant IA. La simulation elle-même — tout `src/logic/` et `src/entities/`,
-c'est-à-dire les règles du jeu et les classes d'entités — a été écrite par
-l'étudiant sans IA et peut être expliquée ligne par ligne.
-
-Les noms dans `src/logic/` et `src/entities/` sont volontairement descriptifs
-(par exemple `survivant_le_plus_proche`, `mur_abime_a_cote`,
-`durabilite_initiale_murs`) et le code est aéré (accolades Allman, une idée par
-ligne) pour être lu et présenté en cours.
-
-## Compilation (WSL / Ubuntu)
-
-```sh
-make
-```
-
-Le Makefile lance une compilation dans `build/` via `qmake6`.
+Le menu permet de choisir le nombre de survivants et de zombies, les plantes de
+départ, la résistance des murs, les métiers, les types de zombies et la graine
+aléatoire.
 
 ## Lancer le jeu
 
+### Sous WSL / Ubuntu
+
+Installer les dépendances requises : `g++`, `make`, `qmake6` et Qt 6 Widgets
+(paquets Ubuntu : `qt6-base-dev` et `qt6-base-dev-tools`). Depuis la racine du
+projet, compiler puis lancer :
+
 ```sh
+make
 make run
 ```
 
-ou :
+Il est aussi possible de lancer directement `./build/ZomboGIG` après la
+compilation. Sous Windows avec WSL installé, `run.cmd` lance l'exécutable déjà
+compilé.
 
-```sh
-./build/ZomboGIG
-```
+## Code et utilisation de l'IA
 
-## Nettoyer
-
-```sh
-make clean
-```
-
-## Prérequis
-
-- g++ avec C++20
-- make
-- qt6-base-dev, qt6-base-dev-tools (Qt 6.10.2)
-- WSLg pour la fenêtre (WSL 2 sous Windows 11)
+L'IA a aidé à réaliser l'interface dans `src/ui/ui.cpp`, conformément aux
+consignes. Les entités et les règles de jeu ont été écrites par
+moi même.
+certaines corrections ont aussi été faites avec l'aide de l'IA.

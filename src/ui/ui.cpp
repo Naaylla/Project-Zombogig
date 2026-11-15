@@ -275,6 +275,18 @@ constexpr int MAP_MARGIN = 36;
 constexpr qreal MAX_MAP_SCALE = 2.6;
 constexpr qreal PI = 3.14159265358979323846;
 
+//les sprites sont des choix de dessin propres a l'interface
+enum class Sprite {
+    Farmer,
+    Doctor,
+    Military,
+    Builder,
+    Child,
+    Tank,
+    Runner,
+    Exploder
+};
+
 QColor darker(const QColor& color, int amount) {
     return QColor(std::max(0, color.red() - amount),
                   std::max(0, color.green() - amount),
@@ -285,6 +297,37 @@ QColor mixColor(const QColor& a, const QColor& b, qreal t) {
     return QColor(qRound(a.red() + (b.red() - a.red()) * t),
                   qRound(a.green() + (b.green() - a.green()) * t),
                   qRound(a.blue() + (b.blue() - a.blue()) * t));
+}
+
+//associe le type de personnage a son sprite dessine
+Sprite spriteForEntity(const Entity& entity) {
+    if (const auto* human = dynamic_cast<const Human*>(&entity)) {
+        switch (human->type_humain()) {
+        case HumanType::Farmer:
+            return Sprite::Farmer;
+        case HumanType::Doctor:
+            return Sprite::Doctor;
+        case HumanType::Military:
+            return Sprite::Military;
+        case HumanType::Builder:
+            return Sprite::Builder;
+        case HumanType::Child:
+            return Sprite::Child;
+        }
+    }
+
+    if (const auto* zombie = dynamic_cast<const Zombie*>(&entity)) {
+        switch (zombie->type_zombie()) {
+        case ZombieType::Tank:
+            return Sprite::Tank;
+        case ZombieType::Runner:
+            return Sprite::Runner;
+        case ZombieType::Exploder:
+            return Sprite::Exploder;
+        }
+    }
+
+    return Sprite::Farmer;
 }
 
 bool isHumanSprite(Sprite sprite) {
@@ -383,11 +426,48 @@ void drawBlock(QPainter& painter, int cx, int baseCenterY, const QColor& base) {
     painter.drawPolygon(top);
 }
 
+void drawWallSegment(QPainter& painter, const QPoint& first,
+                     const QPoint& second, int height, QColor color,
+                     bool damaged = false, bool drawPosts = true) {
+    const QPoint firstTop(first.x(), first.y() - height);
+    const QPoint secondTop(second.x(), second.y() - height);
+
+    painter.setPen(QPen(QColor(46, 40, 33), 1));
+    painter.setBrush(color);
+    painter.drawPolygon(QPolygon()
+                        << first << second << secondTop << firstTop);
+
+    painter.setPen(QPen(QColor(50, 43, 35, 160), 1));
+    for (int i = 1; i <= 2; ++i) {
+        const int drop = height * i / 3;
+        painter.drawLine(first.x(), first.y() - drop,
+                         second.x(), second.y() - drop);
+    }
+
+    if (damaged) {
+        painter.setPen(QPen(QColor(34, 29, 24, 190), 1));
+        const int centerX = (first.x() + second.x()) / 2;
+        const int centerY = (first.y() + second.y()) / 2;
+        painter.drawLine(centerX - 5, centerY - height / 3,
+                         centerX + 5, centerY - height * 2 / 3);
+    }
+
+    if (drawPosts) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(54, 47, 38));
+        painter.drawRect(QRectF(first.x() - 2, first.y() - height,
+                                4, height + 3));
+        painter.drawRect(QRectF(second.x() - 2, second.y() - height,
+                                4, height + 3));
+    }
+}
+
 void drawWall(QPainter& painter, int cx, int topY, const Wall& wall) {
     const int wallHeight = 22;
     const QPoint top(cx, topY - TOP_HALF_HEIGHT);
     const QPoint left(cx - TOP_HALF_WIDTH, topY);
     const QPoint right(cx + TOP_HALF_WIDTH, topY);
+    const QPoint bottom(cx, topY + TOP_HALF_HEIGHT);
 
     if (wall.est_detruit()) {
         painter.setPen(Qt::NoPen);
@@ -403,30 +483,47 @@ void drawWall(QPainter& painter, int cx, int topY, const Wall& wall) {
     }
 
     if (wall.est_porte()) {
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(54, 47, 38));
-        painter.drawRect(QRectF(left.x() - 2, left.y() - wallHeight,
-                                4, wallHeight + 3));
-        painter.drawRect(QRectF(right.x() - 2, right.y() - wallHeight,
-                                4, wallHeight + 3));
+        QPoint first = top;
+        QPoint second = right;
+        QPoint swing(TOP_HALF_WIDTH, -TOP_HALF_HEIGHT);
+
+        if (wall.ligne() == Game::fin_base) {
+            first = left;
+            second = bottom;
+        } else if (wall.colonne() == Game::debut_base) {
+            first = top;
+            second = left;
+            swing = QPoint(TOP_HALF_WIDTH, TOP_HALF_HEIGHT);
+        } else if (wall.colonne() == Game::fin_base) {
+            first = right;
+            second = bottom;
+            swing = QPoint(-TOP_HALF_WIDTH, -TOP_HALF_HEIGHT);
+        }
+
+        const int doorHeight = wallHeight * 4 / 5;
+        const QPoint edge = second - first;
+        const QPoint hinge(first.x() + edge.x() / 10,
+                           first.y() + edge.y() / 10);
+        QPoint end;
 
         if (wall.est_ouverte()) {
-            painter.setBrush(QColor(40, 34, 28, 170));
-            painter.drawRect(QRectF(cx - 30, topY - 3, 60, 5));
+            end = QPoint(hinge.x() + swing.x() * 4 / 5,
+                         hinge.y() + swing.y() * 4 / 5);
         } else {
-            painter.setBrush(QColor(118, 86, 52));
-            painter.drawPolygon(QPolygon()
-                                << QPoint(cx - 34, topY - 2)
-                                << QPoint(cx - 30, topY - wallHeight)
-                                << QPoint(cx + 30, topY - wallHeight)
-                                << QPoint(cx + 34, topY - 2));
-            painter.setPen(QPen(QColor(74, 52, 32), 1));
-            for (int i = 1; i <= 3; ++i) {
-                const int drop = wallHeight * i / 4;
-                painter.drawLine(cx - 32, topY - drop,
-                                 cx + 32, topY - drop);
-            }
+            end = QPoint(second.x() - edge.x() / 10,
+                         second.y() - edge.y() / 10);
+        }
+
+        drawWallSegment(painter, hinge, end, doorHeight,
+                        QColor(118, 86, 52),
+                        wall.durabilite() * 2 < wall.durabilite_max(),
+                        !wall.est_ouverte());
+        if (wall.est_ouverte()) {
             painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(54, 47, 38));
+            painter.drawRect(QRectF(hinge.x() - 2,
+                                    hinge.y() - doorHeight,
+                                    4, doorHeight + 3));
         }
         return;
     }
@@ -457,46 +554,31 @@ void drawWall(QPainter& painter, int cx, int topY, const Wall& wall) {
         return;
     }
 
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(66, 58, 48));
-    painter.drawPolygon(QPolygon()
-                        << left << top
-                        << QPoint(top.x(), top.y() - wallHeight)
-                        << QPoint(left.x(), left.y() - wallHeight));
-    painter.setBrush(QColor(78, 68, 56));
-    painter.drawPolygon(QPolygon()
-                        << top << right
-                        << QPoint(right.x(), right.y() - wallHeight)
-                        << QPoint(top.x(), top.y() - wallHeight));
+    const QColor color(72, 63, 52);
+    const bool damaged =
+        wall.durabilite() * 2 < wall.durabilite_max();
+    bool drew_segment = false;
 
-    painter.setPen(QPen(QColor(46, 40, 33), 2));
-    painter.drawLine(left.x(), left.y() - wallHeight,
-                     top.x(), top.y() - wallHeight);
-    painter.drawLine(top.x(), top.y() - wallHeight,
-                     right.x(), right.y() - wallHeight);
-
-    painter.setPen(QPen(QColor(50, 43, 35, 160), 1));
-    for (int i = 1; i <= 2; ++i) {
-        const int drop = wallHeight * i / 3;
-        painter.drawLine(left.x(), left.y() - drop,
-                         top.x(), top.y() - drop);
-        painter.drawLine(top.x(), top.y() - drop,
-                         right.x(), right.y() - drop);
+    if (wall.ligne() == Game::debut_base) {
+        drawWallSegment(painter, top, right, wallHeight, color, damaged);
+        drew_segment = true;
+    }
+    if (wall.ligne() == Game::fin_base) {
+        drawWallSegment(painter, left, bottom, wallHeight, color, damaged);
+        drew_segment = true;
+    }
+    if (wall.colonne() == Game::debut_base) {
+        drawWallSegment(painter, top, left, wallHeight, color, damaged);
+        drew_segment = true;
+    }
+    if (wall.colonne() == Game::fin_base) {
+        drawWallSegment(painter, right, bottom, wallHeight, color, damaged);
+        drew_segment = true;
     }
 
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(54, 47, 38));
-    const QPoint posts[] = {left, top, right};
-    for (const QPoint& post : posts) {
-        painter.drawRect(QRectF(post.x() - 2, post.y() - wallHeight,
-                                4, wallHeight + 3));
-    }
-
-    if (wall.durabilite() * 2 < wall.durabilite_max()) {
-        painter.setPen(QPen(QColor(34, 29, 24, 190), 1));
-        painter.drawLine(cx - 26, topY - 16, cx - 14, topY - 24);
-        painter.drawLine(cx + 8, topY - 12, cx + 22, topY - 24);
-        painter.setPen(Qt::NoPen);
+    if (!drew_segment) {
+        drawWallSegment(painter, left, top, wallHeight, color, damaged);
+        drawWallSegment(painter, top, right, wallHeight, color, damaged);
     }
 }
 
@@ -559,14 +641,33 @@ void drawBush(QPainter& painter, int cx, int topY) {
     painter.drawEllipse(QPointF(cx, topY - 14), 13, 11);
 }
 
-void drawCorpse(QPainter& painter, int cx, int topY) {
+void drawCorpse(QPainter& painter, int cx, int topY, qreal opacity = 1.0) {
+    painter.save();
+    painter.setOpacity(opacity);
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(0, 0, 0, 70));
-    painter.drawEllipse(QPointF(cx, topY + 2), 19, 7);
-    painter.setBrush(QColor(70, 72, 60));
-    painter.drawEllipse(QPointF(cx - 3, topY - 3), 11, 5);
+    painter.drawEllipse(QPointF(cx, topY + 5), 29, 10);
+
+    painter.setPen(QPen(QColor(48, 52, 45), 1));
+    painter.setBrush(QColor(70, 74, 63));
+    painter.drawPolygon(QPolygonF()
+                        << QPointF(cx - 27, topY - 4)
+                        << QPointF(cx + 9, topY - 11)
+                        << QPointF(cx + 18, topY - 3)
+                        << QPointF(cx - 22, topY + 6));
+
+    painter.setPen(QPen(QColor(48, 52, 45), 3));
+    painter.drawLine(QPointF(cx - 12, topY - 1),
+                     QPointF(cx - 23, topY - 10));
+    painter.drawLine(QPointF(cx - 8, topY + 2),
+                     QPointF(cx - 16, topY + 11));
+    painter.drawLine(QPointF(cx + 5, topY + 1),
+                     QPointF(cx + 14, topY + 9));
+
+    painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(96, 92, 80));
-    painter.drawEllipse(QPointF(cx + 8, topY - 5), 6, 5);
+    painter.drawEllipse(QPointF(cx + 24, topY - 6), 8, 7);
+    painter.restore();
 }
 
 void drawCampfire(QPainter& painter, int cx, int topY) {
@@ -596,6 +697,45 @@ void drawCampfire(QPainter& painter, int cx, int topY) {
     painter.drawEllipse(QPointF(cx + 6, topY - 8), 3.5, 2.0);
     painter.setBrush(QColor(232, 150, 54));
     painter.drawEllipse(QPointF(cx + 1, topY - 10), 5, 3);
+}
+
+void drawFoodAid(QPainter& painter, int cx, int topY) {
+    const int groundY = topY + 3;
+    painter.save();
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 0, 0, 75));
+    painter.drawEllipse(QPointF(cx, groundY + 4), 22, 7);
+
+    QPolygonF top;
+    top << QPointF(cx, groundY - 17)
+        << QPointF(cx + 17, groundY - 9)
+        << QPointF(cx, groundY - 1)
+        << QPointF(cx - 17, groundY - 9);
+    painter.setBrush(QColor(184, 137, 79));
+    painter.drawPolygon(top);
+
+    QPolygonF leftSide;
+    leftSide << QPointF(cx - 17, groundY - 9)
+             << QPointF(cx, groundY - 1)
+             << QPointF(cx, groundY + 11)
+             << QPointF(cx - 17, groundY + 3);
+    painter.setBrush(QColor(132, 91, 52));
+    painter.drawPolygon(leftSide);
+
+    QPolygonF rightSide;
+    rightSide << QPointF(cx + 17, groundY - 9)
+              << QPointF(cx, groundY - 1)
+              << QPointF(cx, groundY + 11)
+              << QPointF(cx + 17, groundY + 3);
+    painter.setBrush(QColor(101, 69, 43));
+    painter.drawPolygon(rightSide);
+
+    painter.setPen(QPen(QColor(238, 215, 164), 2));
+    painter.drawLine(QPointF(cx - 7, groundY - 10),
+                     QPointF(cx + 7, groundY - 10));
+    painter.drawLine(QPointF(cx, groundY - 14),
+                     QPointF(cx, groundY - 6));
+    painter.restore();
 }
 
 void drawDecoration(QPainter& painter, int cx, int topY, Decoration decoration) {
@@ -646,8 +786,9 @@ void drawBloodSplat(QPainter& painter, int cx, int groundY, quint32 seed) {
     painter.restore();
 }
 
+//dessine l'entite selon le sprite fourni par son type
 void drawEntity(QPainter& painter, int cx, int topY, const Entity& entity) {
-    const Sprite sprite = entity.sprite();
+    const Sprite sprite = spriteForEntity(entity);
     const bool human = isHumanSprite(sprite);
     const QColor body = entity.couleur();
 
@@ -1336,6 +1477,19 @@ void MapView::buildMapLayer() {
                 fireCol_ = col;
             }
             drawDecoration(painter, cx, topY, cell.decoration());
+            if (cell.a_un_cadavre()) {
+                const qreal opacity =
+                    cell.tours_cadavre() /
+                    static_cast<qreal>(Cell::duree_cadavre);
+                const bool plant_on_cell = cell.plante() != nullptr;
+                drawCorpse(painter,
+                           cx + (plant_on_cell ? 32 : 0),
+                           topY + (plant_on_cell ? 15 : 0),
+                           opacity);
+            }
+            if (cell.ravitaillement() > 0) {
+                drawFoodAid(painter, cx, topY);
+            }
             if (const Entity* entity = cell.occupant()) {
                 drawEntity(painter, cx, topY, *entity);
             }
@@ -1599,6 +1753,45 @@ void MapView::drawHover(QPainter& painter) {
 
     const qreal halfW = TOP_HALF_WIDTH * mapScale_;
     const qreal halfH = TOP_HALF_HEIGHT * mapScale_;
+    const Cell& cell = game_.grille().cellule(hoverRow_, hoverCol_);
+    const Entity* entity = cell.occupant();
+    const Human* human = dynamic_cast<const Human*>(entity);
+
+    if (human != nullptr && human->type_humain() == HumanType::Military) {
+        const auto centre_case = [this, originX, planeY](qreal ligne,
+                                                         qreal colonne) {
+            return cacheToWidget(
+                originX + (colonne - ligne) * TOP_HALF_WIDTH,
+                planeY + (colonne + ligne) * TOP_HALF_HEIGHT);
+        };
+
+        painter.save();
+        painter.setPen(QPen(QColor(238, 186, 98, 100), 1, Qt::DotLine));
+        painter.setBrush(QColor(238, 186, 98, 28));
+
+        for (int ligne = 0; ligne < game_.grille().lignes(); ligne++) {
+            for (int colonne = 0;
+                 colonne < game_.grille().colonnes(); colonne++) {
+                if (Game::distance_manhattan(
+                        hoverRow_, hoverCol_, ligne, colonne) >
+                    Human::portee_tir) {
+                    continue;
+                }
+
+                const QPointF tileCenter = centre_case(ligne, colonne);
+                QPolygonF tile;
+                tile << QPointF(tileCenter.x(),
+                                tileCenter.y() - halfH)
+                     << QPointF(tileCenter.x() + halfW, tileCenter.y())
+                     << QPointF(tileCenter.x(),
+                                tileCenter.y() + halfH)
+                     << QPointF(tileCenter.x() - halfW, tileCenter.y());
+                painter.drawPolygon(tile);
+            }
+        }
+
+        painter.restore();
+    }
 
     QPolygonF diamond;
     diamond << QPointF(center.x(), center.y() - halfH)
@@ -1704,6 +1897,10 @@ void MapView::drawTooltip(QPainter& painter) {
               << QStringLiteral("SPEED   %1").arg(entity->vitesse());
         if (const auto* human = dynamic_cast<const Human*>(entity)) {
             lines << QStringLiteral("HUNGER  %1%%").arg(human->faim());
+            if (human->type_humain() == HumanType::Military) {
+                lines << QStringLiteral("SHOT RANGE  %1 tiles")
+                             .arg(Human::portee_tir);
+            }
             if (human->compteur_infection() > 0) {
                 lines << QStringLiteral("INFECT  %1 / %2")
                              .arg(human->compteur_infection())
@@ -1725,12 +1922,20 @@ void MapView::drawTooltip(QPainter& painter) {
         lines << QStringLiteral("DURAB.  %1 / %2")
                      .arg(wall->durabilite())
                      .arg(wall->durabilite_max());
+    } else if (cell.a_un_cadavre()) {
+        title = QStringLiteral("Zombie Corpse");
+        lines << QStringLiteral("DISINTEGRATES IN %1 TURNS")
+                     .arg(cell.tours_cadavre());
     } else if (const Plant* plant = cell.plante()) {
         title = QStringLiteral("Food Plant");
         lines << QStringLiteral("GROWTH  %1 / %2")
                      .arg(plant->croissance())
                      .arg(Plant::croissance_max)
               << QStringLiteral("HARVEST %1").arg(2 + plant->croissance());
+    } else if (cell.ravitaillement() > 0) {
+        title = QStringLiteral("Food Aid");
+        lines << QStringLiteral("%1 food; any survivor collects it.")
+                     .arg(cell.ravitaillement());
     } else {
         switch (cell.decoration()) {
         case Decoration::Tree:
@@ -1752,6 +1957,12 @@ void MapView::drawTooltip(QPainter& painter) {
             lines << QStringLiteral("Nothing here.");
             break;
         }
+    }
+
+    if (cell.ravitaillement() > 0 &&
+        title != QStringLiteral("Food Aid")) {
+        lines << QStringLiteral("FOOD AID  %1")
+                     .arg(cell.ravitaillement());
     }
 
     const qreal ui = std::clamp(mapScale_, 1.0, 2.2);

@@ -7,4 +7,4 @@ TARGET = ZomboGIG
 
 INCLUDEPATH += src
 
-SOURCES += src/main.cpp
+SOURCES += src/game-loop.cpp
